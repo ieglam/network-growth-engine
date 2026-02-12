@@ -79,7 +79,7 @@ Create seed script that populates default strategic categories with relevance we
 
 ### TASK-004: Contact CRUD API
 
-**Status:** `[ ]`
+**Status:** `[x]`
 **Complexity:** M
 **Dependencies:** TASK-002
 

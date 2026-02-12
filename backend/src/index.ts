@@ -3,6 +3,7 @@ import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import { config } from './lib/config.js';
 import { healthRoutes } from './routes/health.js';
+import { contactRoutes } from './routes/contacts.js';
 
 const fastify = Fastify({
   logger: {
@@ -33,6 +34,7 @@ async function buildApp() {
 
   // Register routes
   await fastify.register(healthRoutes, { prefix: '/api' });
+  await fastify.register(contactRoutes, { prefix: '/api' });
 
   return fastify;
 }
