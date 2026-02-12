@@ -1,0 +1,66 @@
+import Fastify from 'fastify';
+import cors from '@fastify/cors';
+import helmet from '@fastify/helmet';
+import { config } from './lib/config.js';
+import { healthRoutes } from './routes/health.js';
+
+const fastify = Fastify({
+  logger: {
+    level: config.logLevel,
+    transport:
+      config.nodeEnv === 'development'
+        ? {
+            target: 'pino-pretty',
+            options: {
+              translateTime: 'HH:MM:ss Z',
+              ignore: 'pid,hostname',
+            },
+          }
+        : undefined,
+  },
+});
+
+async function buildApp() {
+  // Register plugins
+  await fastify.register(cors, {
+    origin: config.corsOrigin,
+    credentials: true,
+  });
+
+  await fastify.register(helmet, {
+    contentSecurityPolicy: false, // Disable for development
+  });
+
+  // Register routes
+  await fastify.register(healthRoutes, { prefix: '/api' });
+
+  return fastify;
+}
+
+async function start() {
+  try {
+    const app = await buildApp();
+
+    await app.listen({
+      port: config.port,
+      host: '0.0.0.0',
+    });
+
+    console.log(`
+╔═══════════════════════════════════════════════════════════╗
+║     Network Growth Engine - Backend Server                ║
+╠═══════════════════════════════════════════════════════════╣
+║  Server running at http://localhost:${config.port}                ║
+║  Environment: ${config.nodeEnv.padEnd(41)}║
+║  Health check: http://localhost:${config.port}/api/health         ║
+╚═══════════════════════════════════════════════════════════╝
+    `);
+  } catch (err) {
+    fastify.log.error(err);
+    process.exit(1);
+  }
+}
+
+start();
+
+export { buildApp };

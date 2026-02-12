@@ -1,0 +1,46 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+.next/
+out/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+.claude/
+*.swp
+*.swo
+
+# TypeScript build info
+*.tsbuildinfo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Test coverage
+coverage/
+
+# Prisma
+prisma/migrations/*_migration.sql
+
+# Playwright browser data (LinkedIn automation)
+.playwright/
+browser-data/
+cookies.json
+
+# Temporary files
+tmp/
+temp/
+*.tmp
