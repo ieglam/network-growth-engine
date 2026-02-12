@@ -1,5 +1,6 @@
 import { FastifyInstance, FastifyPluginOptions } from 'fastify';
 import { z } from 'zod';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 
 const contactFields = [
@@ -54,7 +55,284 @@ function buildFieldSources(
   return sources;
 }
 
+const listContactsSchema = z.object({
+  q: z.string().optional(),
+  status: z.string().optional(), // comma-separated
+  category: z.string().optional(), // comma-separated UUIDs
+  tag: z.string().optional(), // comma-separated UUIDs
+  scoreMin: z.coerce.number().int().min(0).max(100).optional(),
+  scoreMax: z.coerce.number().int().min(0).max(100).optional(),
+  location: z.string().optional(),
+  sort: z
+    .enum([
+      'name',
+      '-name',
+      'company',
+      '-company',
+      'relationship_score',
+      '-relationship_score',
+      'last_interaction',
+      '-last_interaction',
+      'created_at',
+      '-created_at',
+    ])
+    .optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional().default(50),
+  offset: z.coerce.number().int().min(0).optional().default(0),
+});
+
+const validStatuses = ['target', 'requested', 'connected', 'engaged', 'relationship'];
+
+function buildOrderBy(sort: string | undefined): Prisma.ContactOrderByWithRelationInput[] {
+  switch (sort) {
+    case 'name':
+      return [{ lastName: 'asc' }, { firstName: 'asc' }];
+    case '-name':
+      return [{ lastName: 'desc' }, { firstName: 'desc' }];
+    case 'company':
+      return [{ company: 'asc' }];
+    case '-company':
+      return [{ company: 'desc' }];
+    case 'relationship_score':
+      return [{ relationshipScore: 'asc' }];
+    case '-relationship_score':
+      return [{ relationshipScore: 'desc' }];
+    case 'last_interaction':
+      return [{ lastInteractionAt: 'asc' }];
+    case '-last_interaction':
+      return [{ lastInteractionAt: 'desc' }];
+    case 'created_at':
+      return [{ createdAt: 'asc' }];
+    case '-created_at':
+      return [{ createdAt: 'desc' }];
+    default:
+      return [{ createdAt: 'desc' }];
+  }
+}
+
 export async function contactRoutes(fastify: FastifyInstance, _options: FastifyPluginOptions) {
+  // GET /api/contacts — List/search contacts
+  fastify.get('/contacts', async (request, reply) => {
+    const parseResult = listContactsSchema.safeParse(request.query);
+    if (!parseResult.success) {
+      return reply.status(400).send({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: parseResult.error.issues
+            .map((i) => `${i.path.join('.')}: ${i.message}`)
+            .join('; '),
+        },
+      });
+    }
+
+    const { q, status, category, tag, scoreMin, scoreMax, location, sort, limit, offset } =
+      parseResult.data;
+
+    // Full-text search: use raw SQL for ts_rank scoring
+    if (q && q.trim().length > 0) {
+      const searchTerm = q.trim();
+
+      // Build WHERE conditions
+      const conditions: string[] = ['c.deleted_at IS NULL'];
+      const params: unknown[] = [];
+      let paramIndex = 1;
+
+      // Full-text search condition
+      conditions.push(`c.search_vector @@ plainto_tsquery('english', $${paramIndex})`);
+      params.push(searchTerm);
+      paramIndex++;
+
+      // Status filter
+      if (status) {
+        const statuses = status.split(',').filter((s) => validStatuses.includes(s));
+        if (statuses.length > 0) {
+          const placeholders = statuses.map(() => `$${paramIndex++}`);
+          conditions.push(`c.status::text IN (${placeholders.join(', ')})`);
+          params.push(...statuses);
+        }
+      }
+
+      // Score range
+      if (scoreMin !== undefined) {
+        conditions.push(`c.relationship_score >= $${paramIndex}`);
+        params.push(scoreMin);
+        paramIndex++;
+      }
+      if (scoreMax !== undefined) {
+        conditions.push(`c.relationship_score <= $${paramIndex}`);
+        params.push(scoreMax);
+        paramIndex++;
+      }
+
+      // Location
+      if (location) {
+        conditions.push(`c.location ILIKE $${paramIndex}`);
+        params.push(`%${location}%`);
+        paramIndex++;
+      }
+
+      // Category filter
+      if (category) {
+        const categoryIds = category.split(',');
+        const placeholders = categoryIds.map(() => `$${paramIndex++}`);
+        conditions.push(
+          `EXISTS (SELECT 1 FROM contact_categories cc WHERE cc.contact_id = c.id AND cc.category_id IN (${placeholders.join(', ')}))`
+        );
+        params.push(...categoryIds);
+      }
+
+      // Tag filter
+      if (tag) {
+        const tagIds = tag.split(',');
+        const placeholders = tagIds.map(() => `$${paramIndex++}`);
+        conditions.push(
+          `EXISTS (SELECT 1 FROM contact_tags ct WHERE ct.contact_id = c.id AND ct.tag_id IN (${placeholders.join(', ')}))`
+        );
+        params.push(...tagIds);
+      }
+
+      const whereClause = conditions.join(' AND ');
+
+      // Count query
+      const countResult = await prisma.$queryRawUnsafe<[{ count: bigint }]>(
+        `SELECT COUNT(*) as count FROM contacts c WHERE ${whereClause}`,
+        ...params
+      );
+      const total = Number(countResult[0].count);
+
+      // Build ORDER BY for raw query
+      let orderByClause: string;
+      switch (sort) {
+        case 'name':
+          orderByClause = 'c.last_name ASC, c.first_name ASC';
+          break;
+        case '-name':
+          orderByClause = 'c.last_name DESC, c.first_name DESC';
+          break;
+        case 'company':
+          orderByClause = 'c.company ASC NULLS LAST';
+          break;
+        case '-company':
+          orderByClause = 'c.company DESC NULLS LAST';
+          break;
+        case 'relationship_score':
+          orderByClause = 'c.relationship_score ASC';
+          break;
+        case '-relationship_score':
+          orderByClause = 'c.relationship_score DESC';
+          break;
+        case 'last_interaction':
+          orderByClause = 'c.last_interaction_at ASC NULLS LAST';
+          break;
+        case '-last_interaction':
+          orderByClause = 'c.last_interaction_at DESC NULLS LAST';
+          break;
+        case 'created_at':
+          orderByClause = 'c.created_at ASC';
+          break;
+        case '-created_at':
+          orderByClause = 'c.created_at DESC';
+          break;
+        default:
+          orderByClause = `ts_rank(c.search_vector, plainto_tsquery('english', $1)) DESC`;
+          break;
+      }
+
+      // Data query — select contact IDs with ranking
+      const limitParam = paramIndex++;
+      const offsetParam = paramIndex++;
+      params.push(limit, offset);
+
+      const rows = await prisma.$queryRawUnsafe<{ id: string }[]>(
+        `SELECT c.id FROM contacts c WHERE ${whereClause} ORDER BY ${orderByClause} LIMIT $${limitParam} OFFSET $${offsetParam}`,
+        ...params
+      );
+
+      // Fetch full contacts with relations using Prisma
+      const ids = rows.map((r) => r.id);
+      let contacts: unknown[] = [];
+      if (ids.length > 0) {
+        const fullContacts = await prisma.contact.findMany({
+          where: { id: { in: ids } },
+          include: {
+            categories: { include: { category: true } },
+            tags: { include: { tag: true } },
+          },
+        });
+        // Preserve the order from the raw query
+        const contactMap = new Map(fullContacts.map((c) => [c.id, c]));
+        contacts = ids.map((id) => contactMap.get(id)).filter(Boolean);
+      }
+
+      return {
+        success: true,
+        data: contacts,
+        pagination: {
+          total,
+          limit,
+          offset,
+          hasMore: offset + limit < total,
+        },
+      };
+    }
+
+    // Non-search: use Prisma query builder
+    const where: Prisma.ContactWhereInput = { deletedAt: null };
+
+    if (status) {
+      const statuses = status.split(',').filter((s) => validStatuses.includes(s));
+      if (statuses.length > 0) {
+        where.status = { in: statuses as Prisma.EnumContactStatusFilter['in'] };
+      }
+    }
+
+    if (scoreMin !== undefined || scoreMax !== undefined) {
+      where.relationshipScore = {};
+      if (scoreMin !== undefined) where.relationshipScore.gte = scoreMin;
+      if (scoreMax !== undefined) where.relationshipScore.lte = scoreMax;
+    }
+
+    if (location) {
+      where.location = { contains: location, mode: 'insensitive' };
+    }
+
+    if (category) {
+      const categoryIds = category.split(',');
+      where.categories = { some: { categoryId: { in: categoryIds } } };
+    }
+
+    if (tag) {
+      const tagIds = tag.split(',');
+      where.tags = { some: { tagId: { in: tagIds } } };
+    }
+
+    const [total, contacts] = await Promise.all([
+      prisma.contact.count({ where }),
+      prisma.contact.findMany({
+        where,
+        include: {
+          categories: { include: { category: true } },
+          tags: { include: { tag: true } },
+        },
+        orderBy: buildOrderBy(sort),
+        take: limit,
+        skip: offset,
+      }),
+    ]);
+
+    return {
+      success: true,
+      data: contacts,
+      pagination: {
+        total,
+        limit,
+        offset,
+        hasMore: offset + limit < total,
+      },
+    };
+  });
+
   // POST /api/contacts — Create a contact
   fastify.post('/contacts', async (request, reply) => {
     const parseResult = createContactSchema.safeParse(request.body);

@@ -99,7 +99,7 @@ Implement REST API endpoints for creating, reading, updating, and deleting conta
 
 ### TASK-005: Contact search and filter API
 
-**Status:** `[ ]`
+**Status:** `[x]`
 **Complexity:** M
 **Dependencies:** TASK-004
 
