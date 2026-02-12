@@ -34,7 +34,7 @@ Initialize the monorepo with Next.js frontend, Node.js backend (Fastify), Postgr
 
 ### TASK-002: Database schema and Prisma setup
 
-**Status:** `[ ]`
+**Status:** `[x]`
 **Complexity:** L
 **Dependencies:** TASK-001
 
@@ -43,22 +43,22 @@ Define the complete database schema in Prisma, including all entities from the d
 
 **Acceptance Criteria:**
 
-- [ ] All 15 entities defined in Prisma schema (including Settings)
-- [ ] Contact includes `last_interaction_at` TIMESTAMP and `field_sources` JSONB
-- [ ] Template body is VARCHAR(300) for LinkedIn connection note limit
-- [ ] All relationships (foreign keys, join tables) correctly defined
-- [ ] JSONB fields for metadata columns
-- [ ] Enums for status, interaction_type, seniority, etc.
-- [ ] Indexes on status, relationship_score, priority_score
-- [ ] Full-text search index on contact name/company/title/notes
-- [ ] `npx prisma migrate dev` runs successfully
-- [ ] Seed file creates default categories and scoring config
+- [x] All 15 entities defined in Prisma schema (including Settings)
+- [x] Contact includes `last_interaction_at` TIMESTAMP and `field_sources` JSONB
+- [x] Template body is VARCHAR(300) for LinkedIn connection note limit
+- [x] All relationships (foreign keys, join tables) correctly defined
+- [x] JSONB fields for metadata columns
+- [x] Enums for status, interaction_type, seniority, etc.
+- [x] Indexes on status, relationship_score, priority_score
+- [x] Full-text search index on contact name/company/title/notes
+- [x] `npx prisma migrate dev` runs successfully
+- [x] Seed file creates default categories and scoring config
 
 ---
 
 ### TASK-003: Seed default data
 
-**Status:** `[ ]`
+**Status:** `[x]`
 **Complexity:** S
 **Dependencies:** TASK-002
 
@@ -67,11 +67,11 @@ Create seed script that populates default strategic categories with relevance we
 
 **Acceptance Criteria:**
 
-- [ ] 7 default categories seeded with weights from PRD
-- [ ] All relationship scoring weights seeded (meeting, email, DM, etc.)
-- [ ] Priority formula weights seeded (0.5, 0.3, 0.2)
-- [ ] 3 sample templates created (crypto exec, MBA, general)
-- [ ] Seed is idempotent (can run multiple times safely)
+- [x] 7 default categories seeded with weights from PRD
+- [x] All relationship scoring weights seeded (meeting, email, DM, etc.)
+- [x] Priority formula weights seeded (0.5, 0.3, 0.2)
+- [x] 3 sample templates created (crypto exec, MBA, general)
+- [x] Seed is idempotent (can run multiple times safely)
 
 ---
 

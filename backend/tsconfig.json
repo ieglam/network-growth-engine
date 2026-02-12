@@ -20,6 +20,6 @@
       "@nge/shared": ["../shared/types/index.ts"]
     }
   },
-  "include": ["src/**/*", "prisma/**/*"],
+  "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]
 }

@@ -27,6 +27,36 @@ export type QueueItemStatus = 'pending' | 'approved' | 'executed' | 'skipped' | 
 
 export type QueueActionType = 'connection_request' | 'follow_up' | 're_engagement';
 
+export type QueueItemResult = 'success' | 'failed';
+
+export type StatusTransitionTrigger =
+  | 'manual'
+  | 'automated_promotion'
+  | 'automated_demotion'
+  | 'unfriended'
+  | 'import_trigger';
+
+export type ScoreType = 'relationship' | 'priority';
+
+export type MergeType = 'auto' | 'manual';
+
+export type ScoringConfigType =
+  | 'relationship_weight'
+  | 'priority_weight'
+  | 'timing_trigger'
+  | 'status_threshold'
+  | 'general';
+
+// Score bands
+export const SCORE_BANDS = {
+  cold: { min: 0, max: 20 },
+  warm: { min: 21, max: 50 },
+  active: { min: 51, max: 75 },
+  strong: { min: 76, max: 100 },
+} as const;
+
+export type ScoreBand = keyof typeof SCORE_BANDS;
+
 // API Response types
 export interface ApiResponse<T> {
   success: boolean;

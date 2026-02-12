@@ -1,8 +1,6 @@
-// This is your Prisma schema file
-// Full schema will be implemented in TASK-002
-
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["fullTextSearch"]
 }
 
 datasource db {
@@ -10,11 +8,323 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Placeholder model - full schema in TASK-002
-model HealthCheck {
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum ContactStatus {
+  target
+  requested
+  connected
+  engaged
+  relationship
+}
+
+enum Seniority {
+  ic
+  manager
+  director
+  vp
+  c_suite
+}
+
+enum InteractionType {
+  linkedin_message
+  email
+  meeting_1on1_inperson
+  meeting_1on1_virtual
+  meeting_group
+  linkedin_comment_given
+  linkedin_comment_received
+  linkedin_like_given
+  linkedin_like_received
+  introduction_given
+  introduction_received
+  manual_note
+  connection_request_sent
+  connection_request_accepted
+}
+
+enum InteractionSource {
+  manual
+  linkedin
+  gmail
+  calendar
+}
+
+enum QueueItemStatus {
+  pending
+  approved
+  executed
+  skipped
+  snoozed
+}
+
+enum QueueActionType {
+  connection_request
+  follow_up
+  re_engagement
+}
+
+enum QueueItemResult {
+  success
+  failed
+}
+
+enum StatusTransitionTrigger {
+  manual
+  automated_promotion
+  automated_demotion
+  unfriended
+  import_trigger
+}
+
+enum ScoreType {
+  relationship
+  priority
+}
+
+enum MergeType {
+  auto
+  manual
+}
+
+enum ScoringConfigType {
+  relationship_weight
+  priority_weight
+  timing_trigger
+  status_threshold
+  general
+}
+
+// ─── Models ──────────────────────────────────────────────────────────────────
+
+model Contact {
+  id                     String        @id @default(uuid())
+  firstName              String        @map("first_name") @db.VarChar(100)
+  lastName               String        @map("last_name") @db.VarChar(100)
+  title                  String?       @db.VarChar(200)
+  company                String?       @db.VarChar(200)
+  linkedinUrl            String?       @unique @map("linkedin_url") @db.VarChar(500)
+  email                  String?       @db.VarChar(200)
+  phone                  String?       @db.VarChar(50)
+  location               String?       @db.VarChar(200)
+  headline               String?
+  status                 ContactStatus @default(target)
+  seniority              Seniority?
+  relationshipScore      Int           @default(0) @map("relationship_score")
+  priorityScore          Decimal?      @map("priority_score") @db.Decimal(5, 2)
+  notes                  String?
+  introductionSource     String?       @map("introduction_source") @db.VarChar(200)
+  mutualConnectionsCount Int           @default(0) @map("mutual_connections_count")
+  isActiveOnLinkedin     Boolean       @default(false) @map("is_active_on_linkedin")
+  hasOpenToConnect       Boolean       @default(false) @map("has_open_to_connect")
+  lastInteractionAt      DateTime?     @map("last_interaction_at")
+  fieldSources           Json?         @map("field_sources")
+  deletedAt              DateTime?     @map("deleted_at")
+  createdAt              DateTime      @default(now()) @map("created_at")
+  updatedAt              DateTime      @updatedAt @map("updated_at")
+
+  categories    ContactCategory[]
+  tags          ContactTag[]
+  interactions  Interaction[]
+  queueItems    QueueItem[]
+  statusHistory StatusHistory[]
+  scoreHistory  ScoreHistory[]
+  mergeHistory  MergeHistory[]
+  dataConflicts DataConflict[]
+
+  @@index([status])
+  @@index([relationshipScore])
+  @@index([priorityScore])
+  @@index([status, priorityScore(sort: Desc)])
+  @@index([email])
+  @@index([deletedAt])
+  @@map("contacts")
+}
+
+model Category {
+  id              String   @id @default(uuid())
+  name            String   @unique @db.VarChar(100)
+  relevanceWeight Int      @map("relevance_weight")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  contacts ContactCategory[]
+
+  @@map("categories")
+}
+
+model ContactCategory {
+  contactId  String @map("contact_id")
+  categoryId String @map("category_id")
+
+  contact  Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([contactId, categoryId])
+  @@map("contact_categories")
+}
+
+model Tag {
   id        String   @id @default(uuid())
-  status    String
+  name      String   @unique @db.VarChar(100)
   createdAt DateTime @default(now()) @map("created_at")
 
-  @@map("health_checks")
+  contacts ContactTag[]
+
+  @@map("tags")
+}
+
+model ContactTag {
+  contactId String @map("contact_id")
+  tagId     String @map("tag_id")
+
+  contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  tag     Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([contactId, tagId])
+  @@map("contact_tags")
+}
+
+model Interaction {
+  id          String            @id @default(uuid())
+  contactId   String            @map("contact_id")
+  type        InteractionType
+  source      InteractionSource @default(manual)
+  occurredAt  DateTime          @map("occurred_at")
+  metadata    Json?
+  pointsValue Int               @default(0) @map("points_value")
+  createdAt   DateTime          @default(now()) @map("created_at")
+
+  contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index([contactId, occurredAt])
+  @@map("interactions")
+}
+
+model Template {
+  id          String   @id @default(uuid())
+  name        String   @db.VarChar(100)
+  persona     String   @db.VarChar(100)
+  subject     String?  @db.VarChar(200)
+  body        String   @db.VarChar(300)
+  isActive    Boolean  @default(true) @map("is_active")
+  timesUsed   Int      @default(0) @map("times_used")
+  acceptances Int      @default(0)
+  responses   Int      @default(0)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  queueItems QueueItem[]
+
+  @@map("templates")
+}
+
+model QueueItem {
+  id                  String          @id @default(uuid())
+  contactId           String          @map("contact_id")
+  queueDate           DateTime        @map("queue_date") @db.Date
+  actionType          QueueActionType @map("action_type")
+  templateId          String?         @map("template_id")
+  personalizedMessage String?         @map("personalized_message")
+  status              QueueItemStatus @default(pending)
+  snoozeUntil         DateTime?       @map("snooze_until") @db.Date
+  executedAt          DateTime?       @map("executed_at")
+  result              QueueItemResult?
+  notes               String?
+  createdAt           DateTime        @default(now()) @map("created_at")
+
+  contact  Contact   @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  template Template? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+
+  @@index([queueDate, status])
+  @@map("queue_items")
+}
+
+model StatusHistory {
+  id            String                   @id @default(uuid())
+  contactId     String                   @map("contact_id")
+  fromStatus    ContactStatus?           @map("from_status")
+  toStatus      ContactStatus            @map("to_status")
+  trigger       StatusTransitionTrigger
+  triggerReason String?                  @map("trigger_reason")
+  createdAt     DateTime                 @default(now()) @map("created_at")
+
+  contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index([contactId])
+  @@map("status_history")
+}
+
+model ScoreHistory {
+  id         String    @id @default(uuid())
+  contactId  String    @map("contact_id")
+  scoreType  ScoreType @map("score_type")
+  scoreValue Decimal   @map("score_value") @db.Decimal(7, 2)
+  recordedAt DateTime  @map("recorded_at") @db.Date
+
+  contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index([contactId, recordedAt])
+  @@map("score_history")
+}
+
+model MergeHistory {
+  id                String   @id @default(uuid())
+  primaryContactId  String   @map("primary_contact_id")
+  mergedContactId   String   @map("merged_contact_id")
+  mergedContactData Json     @map("merged_contact_data")
+  mergeType         MergeType @map("merge_type")
+  mergedAt          DateTime @default(now()) @map("merged_at")
+
+  primaryContact Contact @relation(fields: [primaryContactId], references: [id], onDelete: Cascade)
+
+  @@map("merge_history")
+}
+
+model DataConflict {
+  id                  String    @id @default(uuid())
+  contactId           String    @map("contact_id")
+  fieldName           String    @map("field_name") @db.VarChar(100)
+  manualValue         String?   @map("manual_value")
+  linkedinValue       String?   @map("linkedin_value")
+  emailCalendarValue  String?   @map("email_calendar_value")
+  resolved            Boolean   @default(false)
+  resolvedValue       String?   @map("resolved_value")
+  resolvedAt          DateTime? @map("resolved_at")
+  createdAt           DateTime  @default(now()) @map("created_at")
+
+  contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index([contactId, resolved])
+  @@map("data_conflicts")
+}
+
+model ScoringConfig {
+  id         String            @id @default(uuid())
+  configType ScoringConfigType @map("config_type")
+  key        String            @db.VarChar(100)
+  value      Decimal           @db.Decimal(7, 2)
+  updatedAt  DateTime          @updatedAt @map("updated_at")
+
+  @@unique([configType, key])
+  @@map("scoring_config")
+}
+
+model RateLimitTracker {
+  id               String    @id @default(uuid())
+  weekStart        DateTime  @unique @map("week_start") @db.Date
+  requestsSent     Int       @default(0) @map("requests_sent")
+  cooldownActive   Boolean   @default(false) @map("cooldown_active")
+  cooldownStartedAt DateTime? @map("cooldown_started_at")
+  cooldownEndsAt   DateTime? @map("cooldown_ends_at")
+
+  @@map("rate_limit_tracker")
+}
+
+model Settings {
+  id        String   @id @default(uuid())
+  key       String   @unique @db.VarChar(100)
+  value     String
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("settings")
 }
