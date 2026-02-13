@@ -573,7 +573,7 @@ Implement template list and editor with token insertion, preview, persona assign
 
 ### TASK-025: Category management view
 
-**Status:** `[ ]`
+**Status:** `[x]`
 **Complexity:** S
 **Dependencies:** TASK-008, TASK-018
 
@@ -582,9 +582,9 @@ Implement category list and editor with relevance weight slider.
 
 **Acceptance Criteria:**
 
-- [ ] Category list showing name and relevance weight
-- [ ] Create/Edit form with name and weight (1-10 slider)
-- [ ] Delete with confirmation (warns about unassigning from contacts)
+- [x] Category list showing name and relevance weight
+- [x] Create/Edit form with name and weight (1-10 slider)
+- [x] Delete with confirmation (warns about unassigning from contacts)
 - [ ] Drag to reorder (optional, nice-to-have)
 
 ---

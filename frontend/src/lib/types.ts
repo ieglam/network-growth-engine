@@ -39,6 +39,7 @@ export interface Category {
   id: string;
   name: string;
   relevanceWeight: number;
+  contactCount?: number;
   createdAt: string;
 }
 
