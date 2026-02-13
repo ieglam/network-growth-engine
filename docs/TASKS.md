@@ -635,7 +635,7 @@ Implement settings page for configuring system behavior.
 
 ### TASK-028: Duplicate detection service
 
-**Status:** `[ ]`
+**Status:** `[x]`
 **Complexity:** M
 **Dependencies:** TASK-004
 

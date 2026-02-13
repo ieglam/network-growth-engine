@@ -87,6 +87,12 @@ enum MergeType {
   manual
 }
 
+enum DuplicateStatus {
+  pending
+  merged
+  dismissed
+}
+
 enum ScoringConfigType {
   relationship_weight
   priority_weight
@@ -129,8 +135,10 @@ model Contact {
   queueItems    QueueItem[]
   statusHistory StatusHistory[]
   scoreHistory  ScoreHistory[]
-  mergeHistory  MergeHistory[]
-  dataConflicts DataConflict[]
+  mergeHistory   MergeHistory[]
+  dataConflicts  DataConflict[]
+  duplicatePairA DuplicatePair[] @relation("duplicatePairA")
+  duplicatePairB DuplicatePair[] @relation("duplicatePairB")
 
   @@index([status])
   @@index([relationshipScore])
@@ -296,6 +304,24 @@ model DataConflict {
 
   @@index([contactId, resolved])
   @@map("data_conflicts")
+}
+
+model DuplicatePair {
+  id             String          @id @default(uuid())
+  contactAId     String          @map("contact_a_id")
+  contactBId     String          @map("contact_b_id")
+  matchType      String          @map("match_type") @db.VarChar(50)
+  confidence     String          @db.VarChar(20)
+  status         DuplicateStatus @default(pending)
+  resolvedAt     DateTime?       @map("resolved_at")
+  createdAt      DateTime        @default(now()) @map("created_at")
+
+  contactA Contact @relation("duplicatePairA", fields: [contactAId], references: [id], onDelete: Cascade)
+  contactB Contact @relation("duplicatePairB", fields: [contactBId], references: [id], onDelete: Cascade)
+
+  @@unique([contactAId, contactBId])
+  @@index([status])
+  @@map("duplicate_pairs")
 }
 
 model ScoringConfig {
