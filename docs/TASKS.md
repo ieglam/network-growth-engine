@@ -436,7 +436,7 @@ Create the Next.js app shell with navigation, layout, and responsive design. Imp
 
 ### TASK-019: Contact list view
 
-**Status:** `[ ]`
+**Status:** `[x]`
 **Complexity:** L
 **Dependencies:** TASK-005, TASK-018
 
@@ -445,15 +445,15 @@ Implement the contact list view with search, filters, sorting, and bulk actions.
 
 **Acceptance Criteria:**
 
-- [ ] Table displays: name, company, title, status, relationship score, last interaction
-- [ ] Search bar with full-text search
-- [ ] Filter panel: status, category, tag, score range, location
-- [ ] Sortable columns
-- [ ] Pagination
-- [ ] Checkbox selection for bulk actions
-- [ ] Bulk actions: add tag, remove tag, change category
-- [ ] Click row to navigate to detail view
-- [ ] Performance: smooth scrolling with 1000+ rows visible
+- [x] Table displays: name, company, title, status, relationship score, last interaction
+- [x] Search bar with full-text search
+- [x] Filter panel: status, category, tag, score range, location
+- [x] Sortable columns
+- [x] Pagination
+- [x] Checkbox selection for bulk actions
+- [x] Bulk actions: add tag, remove tag, change category
+- [x] Click row to navigate to detail view
+- [x] Performance: smooth scrolling with 1000+ rows visible
 
 ---
 
