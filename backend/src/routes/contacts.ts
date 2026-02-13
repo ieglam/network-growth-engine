@@ -2,6 +2,7 @@ import { FastifyInstance, FastifyPluginOptions } from 'fastify';
 import { z } from 'zod';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
+import { manualStatusTransition } from '../services/statusTransitionService.js';
 
 const contactFields = [
   'firstName',
@@ -524,6 +525,81 @@ export async function contactRoutes(fastify: FastifyInstance, _options: FastifyP
     return {
       success: true,
       data: { message: 'Contact soft-deleted', id: paramResult.data.id },
+    };
+  });
+
+  // PUT /api/contacts/:id/status — Manual status override
+  fastify.put('/contacts/:id/status', async (request, reply) => {
+    const paramResult = uuidParamSchema.safeParse(request.params);
+    if (!paramResult.success) {
+      return reply.status(400).send({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Invalid contact ID format',
+        },
+      });
+    }
+
+    const bodyResult = z
+      .object({
+        status: z.enum(['target', 'requested', 'connected', 'engaged', 'relationship']),
+        reason: z.string().max(500).optional(),
+      })
+      .safeParse(request.body);
+
+    if (!bodyResult.success) {
+      return reply.status(400).send({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: bodyResult.error.issues
+            .map((i) => `${i.path.join('.')}: ${i.message}`)
+            .join('; '),
+        },
+      });
+    }
+
+    const result = await manualStatusTransition(
+      paramResult.data.id,
+      bodyResult.data.status,
+      bodyResult.data.reason
+    );
+
+    if (!result) {
+      const contact = await prisma.contact.findFirst({
+        where: { id: paramResult.data.id, deletedAt: null },
+      });
+
+      if (!contact) {
+        return reply.status(404).send({
+          success: false,
+          error: {
+            code: 'CONTACT_NOT_FOUND',
+            message: `Contact with ID ${paramResult.data.id} not found`,
+          },
+        });
+      }
+
+      // Same status — no transition needed
+      return {
+        success: true,
+        data: {
+          message: 'No status change needed',
+          currentStatus: contact.status,
+        },
+      };
+    }
+
+    return {
+      success: true,
+      data: {
+        message: 'Status updated',
+        fromStatus: result.fromStatus,
+        toStatus: result.toStatus,
+        trigger: result.trigger,
+        reason: result.reason,
+      },
     };
   });
 }

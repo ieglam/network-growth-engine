@@ -244,7 +244,7 @@ Implement token replacement engine that renders a template with contact data. Ha
 
 ### TASK-014: Status transition service
 
-**Status:** `[ ]`
+**Status:** `[x]`
 **Complexity:** M
 **Dependencies:** TASK-004
 
@@ -253,13 +253,13 @@ Implement automated status transitions based on relationship score thresholds an
 
 **Acceptance Criteria:**
 
-- [ ] Service checks status transitions during score calculation
-- [ ] connected → engaged: score ≥ 30 AND ≥ 2 interactions
-- [ ] engaged → relationship: score ≥ 60 AND ≥ 1 reciprocal interaction
-- [ ] Demotion: score below threshold for 30 consecutive days
-- [ ] Manual override API: `PUT /api/contacts/:id/status`
-- [ ] All transitions logged in StatusHistory with reason
-- [ ] Import can set initial status (skip linear progression)
+- [x] Service checks status transitions during score calculation
+- [x] connected → engaged: score ≥ 30 AND ≥ 2 interactions
+- [x] engaged → relationship: score ≥ 60 AND ≥ 1 reciprocal interaction
+- [x] Demotion: score below threshold for 30 consecutive days
+- [x] Manual override API: `PUT /api/contacts/:id/status`
+- [x] All transitions logged in StatusHistory with reason
+- [x] Import can set initial status (skip linear progression)
 
 ---
 
