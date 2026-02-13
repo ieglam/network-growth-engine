@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { type RowSelectionState, type SortingState } from '@tanstack/react-table';
 import {
   useContacts,
@@ -21,6 +22,7 @@ const SORT_MAP: Record<string, string> = {
 };
 
 export default function ContactsPage() {
+  const router = useRouter();
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
@@ -122,9 +124,27 @@ export default function ContactsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Contacts</h1>
-        {pagination && (
-          <span className="text-sm text-gray-500 dark:text-gray-400">{pagination.total} total</span>
-        )}
+        <div className="flex items-center gap-3">
+          {pagination && (
+            <span className="text-sm text-gray-500 dark:text-gray-400">
+              {pagination.total} total
+            </span>
+          )}
+          <button
+            onClick={() => router.push('/contacts/new')}
+            className="px-3 py-1.5 bg-primary-600 text-white text-sm font-medium rounded-lg hover:bg-primary-700 flex items-center gap-1.5"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 4v16m8-8H4"
+              />
+            </svg>
+            Add Contact
+          </button>
+        </div>
       </div>
 
       {/* Search and filter toggle */}

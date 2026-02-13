@@ -481,7 +481,7 @@ Implement the contact detail page showing all fields, scores, status timeline, i
 
 ### TASK-021: Contact create/edit form
 
-**Status:** `[ ]`
+**Status:** `[x]`
 **Complexity:** M
 **Dependencies:** TASK-004, TASK-018
 
@@ -490,14 +490,14 @@ Implement contact create and edit forms with all fields, validation, category/ta
 
 **Acceptance Criteria:**
 
-- [ ] Form with all contact fields
-- [ ] Required field validation (first_name, last_name)
-- [ ] Category multi-select
-- [ ] Tag input with autocomplete
-- [ ] Status dropdown (for manual override)
-- [ ] Notes textarea
-- [ ] Save marks edited fields as "manual" source
-- [ ] Cancel discards changes
+- [x] Form with all contact fields
+- [x] Required field validation (first_name, last_name)
+- [x] Category multi-select
+- [x] Tag input with autocomplete
+- [x] Status dropdown (for manual override)
+- [x] Notes textarea
+- [x] Save marks edited fields as "manual" source
+- [x] Cancel discards changes
 
 ---
 

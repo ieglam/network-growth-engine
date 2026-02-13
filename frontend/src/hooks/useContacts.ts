@@ -134,3 +134,144 @@ export function useBulkRemoveTag() {
     },
   });
 }
+
+export interface ContactCreateInput {
+  firstName: string;
+  lastName: string;
+  title?: string;
+  company?: string;
+  linkedinUrl?: string;
+  email?: string;
+  phone?: string;
+  location?: string;
+  headline?: string;
+  status?: string;
+  seniority?: string;
+  notes?: string;
+  introductionSource?: string;
+  mutualConnectionsCount?: number;
+  isActiveOnLinkedin?: boolean;
+  hasOpenToConnect?: boolean;
+}
+
+export function useCreateContact() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      contact,
+      categoryIds,
+      tagNames,
+    }: {
+      contact: ContactCreateInput;
+      categoryIds: string[];
+      tagNames: string[];
+    }) => {
+      // Clean empty strings to null
+      const cleaned: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(contact)) {
+        cleaned[key] = value === '' ? undefined : value;
+      }
+
+      const res = await apiFetch<ContactDetailResponse>('/contacts', {
+        method: 'POST',
+        body: JSON.stringify(cleaned),
+      });
+
+      const id = res.data.id;
+
+      // Assign categories
+      if (categoryIds.length > 0) {
+        await apiFetch(`/contacts/${id}/categories`, {
+          method: 'POST',
+          body: JSON.stringify({ categoryIds }),
+        });
+      }
+
+      // Assign tags
+      if (tagNames.length > 0) {
+        await apiFetch(`/contacts/${id}/tags`, {
+          method: 'POST',
+          body: JSON.stringify({ tags: tagNames }),
+        });
+      }
+
+      return res;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['contacts'] });
+    },
+  });
+}
+
+export function useUpdateContact() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      contactId,
+      contact,
+      categoryIds,
+      tagNames,
+    }: {
+      contactId: string;
+      contact: Partial<ContactCreateInput>;
+      categoryIds: string[];
+      tagNames: string[];
+    }) => {
+      // Clean empty strings to null
+      const cleaned: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(contact)) {
+        cleaned[key] = value === '' ? null : value;
+      }
+
+      const res = await apiFetch<ContactDetailResponse>(`/contacts/${contactId}`, {
+        method: 'PUT',
+        body: JSON.stringify(cleaned),
+      });
+
+      // Replace categories: delete all, then assign new ones
+      const existing = await apiFetch<ContactDetailResponse>(`/contacts/${contactId}`);
+      const existingCatIds = existing.data.categories.map((cc) => cc.categoryId);
+
+      // Remove categories no longer selected
+      const toRemoveCats = existingCatIds.filter((id) => !categoryIds.includes(id));
+      for (const catId of toRemoveCats) {
+        await apiFetch(`/contacts/${contactId}/categories/${catId}`, {
+          method: 'DELETE',
+        });
+      }
+
+      // Add new categories
+      const toAddCats = categoryIds.filter((id) => !existingCatIds.includes(id));
+      if (toAddCats.length > 0) {
+        await apiFetch(`/contacts/${contactId}/categories`, {
+          method: 'POST',
+          body: JSON.stringify({ categoryIds: toAddCats }),
+        });
+      }
+
+      // Replace tags: remove old, add new
+      const existingTagNames = existing.data.tags.map((ct) => ct.tag.name);
+
+      const toRemoveTags = existing.data.tags.filter((ct) => !tagNames.includes(ct.tag.name));
+      for (const ct of toRemoveTags) {
+        await apiFetch(`/contacts/${contactId}/tags/${ct.tagId}`, {
+          method: 'DELETE',
+        });
+      }
+
+      const toAddTags = tagNames.filter((name) => !existingTagNames.includes(name));
+      if (toAddTags.length > 0) {
+        await apiFetch(`/contacts/${contactId}/tags`, {
+          method: 'POST',
+          body: JSON.stringify({ tags: toAddTags }),
+        });
+      }
+
+      return res;
+    },
+    onSuccess: (_data, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['contact', vars.contactId] });
+      queryClient.invalidateQueries({ queryKey: ['contacts'] });
+    },
+  });
+}
