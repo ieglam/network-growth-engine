@@ -357,7 +357,7 @@ Implement API for managing queue items: list today's queue, mark items as done/s
 
 ### TASK-015: Basic dashboard API
 
-**Status:** `[ ]`
+**Status:** `[x]`
 **Complexity:** M
 **Dependencies:** TASK-004, TASK-008
 
@@ -366,11 +366,11 @@ Implement API endpoints for dashboard metrics: network size, growth rate, accept
 
 **Acceptance Criteria:**
 
-- [ ] `GET /api/dashboard/growth` returns size vs goal, growth rate, acceptance rate
-- [ ] `GET /api/dashboard/categories` returns breakdown by category
-- [ ] `GET /api/dashboard/scores` returns distribution by band (cold/warm/active/strong)
-- [ ] `GET /api/dashboard/trends` returns time series data for charts
-- [ ] Response cached in Redis (5 min TTL)
+- [x] `GET /api/dashboard/growth` returns size vs goal, growth rate, acceptance rate
+- [x] `GET /api/dashboard/categories` returns breakdown by category
+- [x] `GET /api/dashboard/scores` returns distribution by band (cold/warm/active/strong)
+- [x] `GET /api/dashboard/trends` returns time series data for charts
+- [ ] Response cached in Redis (5 min TTL) — deferred to when Redis is integrated
 
 ---
 
