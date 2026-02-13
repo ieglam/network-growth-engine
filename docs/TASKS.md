@@ -417,7 +417,7 @@ Implement contact export in CSV and JSON formats. Support full export and filter
 
 ### TASK-018: UI shell and navigation
 
-**Status:** `[ ]`
+**Status:** `[x]`
 **Complexity:** M
 **Dependencies:** TASK-001
 
@@ -426,11 +426,11 @@ Create the Next.js app shell with navigation, layout, and responsive design. Imp
 
 **Acceptance Criteria:**
 
-- [ ] App layout with sidebar navigation
-- [ ] Navigation links: Dashboard, Queue, Contacts, Templates, Settings
-- [ ] Responsive: sidebar collapses on mobile
-- [ ] Tailwind CSS configured
-- [ ] Dark mode support (optional, nice-to-have)
+- [x] App layout with sidebar navigation
+- [x] Navigation links: Dashboard, Queue, Contacts, Templates, Settings
+- [x] Responsive: sidebar collapses on mobile
+- [x] Tailwind CSS configured
+- [x] Dark mode support (optional, nice-to-have)
 
 ---
 
