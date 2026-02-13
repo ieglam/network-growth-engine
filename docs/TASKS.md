@@ -182,7 +182,7 @@ Implement API for managing strategic categories (create, edit, delete, list) and
 
 ### TASK-009: Tag CRUD and bulk operations
 
-**Status:** `[ ]`
+**Status:** `[x]`
 **Complexity:** S
 **Dependencies:** TASK-002
 
