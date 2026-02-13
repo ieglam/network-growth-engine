@@ -324,3 +324,287 @@ describe('POST /api/import/linkedin', () => {
     expect(result.data.duplicatesSkipped).toBe(1);
   });
 });
+
+function createMultipartWithMapping(
+  csv: string,
+  mapping: Record<string, string>,
+  filename = 'data.csv'
+) {
+  const boundary = '----FormBoundary' + Date.now();
+  const body =
+    `--${boundary}\r\n` +
+    `Content-Disposition: form-data; name="file"; filename="${filename}"\r\n` +
+    `Content-Type: text/csv\r\n\r\n` +
+    csv +
+    `\r\n--${boundary}\r\n` +
+    `Content-Disposition: form-data; name="mapping"\r\n\r\n` +
+    JSON.stringify(mapping) +
+    `\r\n--${boundary}--\r\n`;
+  return { body, boundary };
+}
+
+describe('POST /api/import/csv/preview', () => {
+  it('returns headers and sample rows', async () => {
+    const csv = buildCSV(
+      ['Name', 'Company', 'Role', 'Email'],
+      [
+        ['John Doe', 'Acme', 'Engineer', 'john@acme.com'],
+        ['Jane Smith', 'Tech', 'VP', 'jane@tech.com'],
+        ['Bob Brown', 'Corp', 'CTO', 'bob@corp.com'],
+      ]
+    );
+
+    const { body, boundary } = createFormData(csv);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/import/csv/preview',
+      headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+      payload: body,
+    });
+
+    expect(res.statusCode).toBe(200);
+    const result = res.json();
+    expect(result.data.headers).toEqual(['Name', 'Company', 'Role', 'Email']);
+    expect(result.data.sampleRows).toHaveLength(3);
+    expect(result.data.totalRows).toBe(3);
+  });
+
+  it('returns at most 3 sample rows', async () => {
+    const csv = buildCSV(
+      ['Col1', 'Col2'],
+      [
+        ['a', 'b'],
+        ['c', 'd'],
+        ['e', 'f'],
+        ['g', 'h'],
+        ['i', 'j'],
+      ]
+    );
+
+    const { body, boundary } = createFormData(csv);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/import/csv/preview',
+      headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+      payload: body,
+    });
+
+    expect(res.json().data.sampleRows).toHaveLength(3);
+    expect(res.json().data.totalRows).toBe(5);
+  });
+
+  it('rejects empty CSV', async () => {
+    const { body, boundary } = createFormData('');
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/import/csv/preview',
+      headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+      payload: body,
+    });
+
+    expect(res.statusCode).toBe(400);
+  });
+});
+
+describe('POST /api/import/csv', () => {
+  it('imports contacts with column mapping', async () => {
+    const csv = buildCSV(
+      ['First', 'Last', 'Organization', 'Role'],
+      [
+        ['John', 'Doe', 'Acme Corp', 'Engineer'],
+        ['Jane', 'Smith', 'Tech Inc', 'VP Sales'],
+      ]
+    );
+
+    const mapping = {
+      firstName: 'First',
+      lastName: 'Last',
+      company: 'Organization',
+      title: 'Role',
+    };
+
+    const { body, boundary } = createMultipartWithMapping(csv, mapping);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/import/csv',
+      headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+      payload: body,
+    });
+
+    expect(res.statusCode).toBe(200);
+    const result = res.json();
+    expect(result.data.imported).toBe(2);
+    expect(result.data.totalRows).toBe(2);
+
+    // Verify default status is "target"
+    const contacts = await prisma.contact.findMany();
+    expect(contacts).toHaveLength(2);
+    expect(contacts.every((c) => c.status === 'target')).toBe(true);
+  });
+
+  it('assigns category from mapped column', async () => {
+    const csv = buildCSV(['First', 'Last', 'Cat'], [['John', 'Doe', 'VIP Contacts']]);
+
+    const mapping = {
+      firstName: 'First',
+      lastName: 'Last',
+      category: 'Cat',
+    };
+
+    const { body, boundary } = createMultipartWithMapping(csv, mapping);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/import/csv',
+      headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+      payload: body,
+    });
+
+    expect(res.json().data.imported).toBe(1);
+
+    const contact = await prisma.contact.findFirst({
+      include: { categories: { include: { category: true } } },
+    });
+    expect(contact!.categories).toHaveLength(1);
+    expect(contact!.categories[0].category.name).toBe('VIP Contacts');
+
+    // Cleanup created category
+    await prisma.contactCategory.deleteMany();
+    await prisma.category.deleteMany({ where: { name: 'VIP Contacts' } });
+  });
+
+  it('skips duplicates by LinkedIn URL', async () => {
+    await app.inject({
+      method: 'POST',
+      url: '/api/contacts',
+      payload: {
+        firstName: 'Existing',
+        lastName: 'Contact',
+        linkedinUrl: 'https://linkedin.com/in/existing',
+      },
+    });
+
+    const csv = buildCSV(
+      ['First', 'Last', 'LinkedIn'],
+      [
+        ['John', 'Doe', 'https://linkedin.com/in/existing'],
+        ['Jane', 'Smith', 'https://linkedin.com/in/newperson'],
+      ]
+    );
+
+    const mapping = { firstName: 'First', lastName: 'Last', linkedinUrl: 'LinkedIn' };
+    const { body, boundary } = createMultipartWithMapping(csv, mapping);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/import/csv',
+      headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+      payload: body,
+    });
+
+    expect(res.json().data.imported).toBe(1);
+    expect(res.json().data.duplicatesSkipped).toBe(1);
+  });
+
+  it('skips name+company duplicates without URL', async () => {
+    await app.inject({
+      method: 'POST',
+      url: '/api/contacts',
+      payload: { firstName: 'John', lastName: 'Doe', company: 'Acme Corp' },
+    });
+
+    const csv = buildCSV(['First', 'Last', 'Org'], [['John', 'Doe', 'Acme Corp']]);
+
+    const mapping = { firstName: 'First', lastName: 'Last', company: 'Org' };
+    const { body, boundary } = createMultipartWithMapping(csv, mapping);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/import/csv',
+      headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+      payload: body,
+    });
+
+    expect(res.json().data.imported).toBe(0);
+    expect(res.json().data.duplicatesSkipped).toBe(1);
+  });
+
+  it('ignores unmapped columns without error', async () => {
+    const csv = buildCSV(
+      ['First', 'Last', 'ExtraCol1', 'ExtraCol2', 'Secret'],
+      [['John', 'Doe', 'ignored', 'also ignored', 'skip this']]
+    );
+
+    const mapping = { firstName: 'First', lastName: 'Last' };
+    const { body, boundary } = createMultipartWithMapping(csv, mapping);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/import/csv',
+      headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+      payload: body,
+    });
+
+    expect(res.json().data.imported).toBe(1);
+    expect(res.json().data.errors).toHaveLength(0);
+  });
+
+  it('rejects missing mapping', async () => {
+    const csv = buildCSV(['First', 'Last'], [['John', 'Doe']]);
+    const { body, boundary } = createFormData(csv);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/import/csv',
+      headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+      payload: body,
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.code).toBe('NO_MAPPING');
+  });
+
+  it('rejects invalid mapping (missing required fields)', async () => {
+    const csv = buildCSV(['Col1'], [['data']]);
+    const mapping = { company: 'Col1' }; // missing firstName and lastName
+
+    const { body, boundary } = createMultipartWithMapping(csv, mapping);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/import/csv',
+      headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+      payload: body,
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.code).toBe('INVALID_MAPPING');
+  });
+
+  it('supports CSV without LinkedIn URLs (name minimum)', async () => {
+    const csv = buildCSV(
+      ['Given Name', 'Family Name'],
+      [
+        ['Alice', 'Alpha'],
+        ['Bob', 'Beta'],
+      ]
+    );
+
+    const mapping = { firstName: 'Given Name', lastName: 'Family Name' };
+    const { body, boundary } = createMultipartWithMapping(csv, mapping);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/import/csv',
+      headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+      payload: body,
+    });
+
+    expect(res.json().data.imported).toBe(2);
+    expect(res.json().data.errors).toHaveLength(0);
+  });
+});

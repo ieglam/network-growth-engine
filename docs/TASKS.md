@@ -141,7 +141,7 @@ Implement LinkedIn CSV export import with duplicate detection. Parse LinkedIn's 
 
 ### TASK-007: Manual CSV import with column mapping
 
-**Status:** `[ ]`
+**Status:** `[x]`
 **Complexity:** M
 **Dependencies:** TASK-004
 
