@@ -395,7 +395,7 @@ Implement API for managing system settings: queue generation time, rate limits, 
 
 ### TASK-017: Export API
 
-**Status:** `[ ]`
+**Status:** `[x]`
 **Complexity:** S
 **Dependencies:** TASK-004
 
@@ -404,12 +404,12 @@ Implement contact export in CSV and JSON formats. Support full export and filter
 
 **Acceptance Criteria:**
 
-- [ ] `GET /api/export/contacts?format=csv` exports all contacts
-- [ ] `GET /api/export/contacts?format=json` exports all contacts
-- [ ] Supports same filters as search (export filtered subset)
-- [ ] Includes all fields, scores, status, tags, categories
-- [ ] `GET /api/export/contacts/:id` exports single contact (GDPR-style)
-- [ ] Optional: include interactions as separate file
+- [x] `GET /api/export/contacts?format=csv` exports all contacts
+- [x] `GET /api/export/contacts?format=json` exports all contacts
+- [x] Supports same filters as search (export filtered subset)
+- [x] Includes all fields, scores, status, tags, categories
+- [x] `GET /api/export/contacts/:id` exports single contact (GDPR-style)
+- [x] Optional: include interactions via `includeInteractions=true` query param
 
 ---
 
