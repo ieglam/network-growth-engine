@@ -203,7 +203,7 @@ Implement API for freeform tags with autocomplete, assignment to contacts, and b
 
 ### TASK-010: Template CRUD
 
-**Status:** `[ ]`
+**Status:** `[x]`
 **Complexity:** S
 **Dependencies:** TASK-002
 

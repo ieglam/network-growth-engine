@@ -7,6 +7,7 @@ import { contactRoutes } from './routes/contacts.js';
 import { importRoutes } from './routes/import.js';
 import { categoryRoutes } from './routes/categories.js';
 import { tagRoutes } from './routes/tags.js';
+import { templateRoutes } from './routes/templates.js';
 
 const fastify = Fastify({
   logger: {
@@ -41,6 +42,7 @@ async function buildApp() {
   await fastify.register(importRoutes, { prefix: '/api' });
   await fastify.register(categoryRoutes, { prefix: '/api' });
   await fastify.register(tagRoutes, { prefix: '/api' });
+  await fastify.register(templateRoutes, { prefix: '/api' });
 
   return fastify;
 }
