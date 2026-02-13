@@ -14,6 +14,7 @@ import { dashboardRoutes } from './routes/dashboard.js';
 import { settingsRoutes } from './routes/settings.js';
 import { exportRoutes } from './routes/export.js';
 import { duplicateRoutes } from './routes/duplicates.js';
+import { conflictRoutes } from './routes/conflicts.js';
 
 const fastify = Fastify({
   logger: {
@@ -55,6 +56,7 @@ async function buildApp() {
   await fastify.register(settingsRoutes, { prefix: '/api' });
   await fastify.register(exportRoutes, { prefix: '/api' });
   await fastify.register(duplicateRoutes, { prefix: '/api' });
+  await fastify.register(conflictRoutes, { prefix: '/api' });
 
   return fastify;
 }
