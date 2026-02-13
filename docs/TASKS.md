@@ -699,7 +699,7 @@ Implement data conflict detection when sources disagree, and UI for resolving co
 
 ### TASK-031: Interaction logging API
 
-**Status:** `[ ]`
+**Status:** `[x]`
 **Complexity:** S
 **Dependencies:** TASK-002
 
@@ -708,12 +708,12 @@ Implement API for manually logging interactions (notes, meetings, calls) that ar
 
 **Acceptance Criteria:**
 
-- [ ] `POST /api/contacts/:id/interactions` creates interaction
-- [ ] Types: manual_note, meeting_1on1_inperson, meeting_1on1_virtual, meeting_group, introduction_given, introduction_received
-- [ ] Metadata stored in JSONB (notes, location, etc.)
-- [ ] occurred_at timestamp (default: now)
-- [ ] Points value calculated based on type
-- [ ] Updates contact's last_interaction timestamp
+- [x] `POST /api/contacts/:id/interactions` creates interaction
+- [x] Types: manual_note, meeting_1on1_inperson, meeting_1on1_virtual, meeting_group, introduction_given, introduction_received
+- [x] Metadata stored in JSONB (notes, location, etc.)
+- [x] occurred_at timestamp (default: now)
+- [x] Points value calculated based on type
+- [x] Updates contact's last_interaction timestamp
 
 ---
 
