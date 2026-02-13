@@ -788,7 +788,7 @@ Implement Bull worker that sends connection requests with personalized notes via
 
 ### TASK-037: LinkedIn profile scraper
 
-**Status:** `[ ]`
+**Status:** `[x]`
 **Complexity:** L
 **Dependencies:** TASK-034, TASK-035
 
