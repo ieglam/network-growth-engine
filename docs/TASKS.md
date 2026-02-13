@@ -376,7 +376,7 @@ Implement API endpoints for dashboard metrics: network size, growth rate, accept
 
 ### TASK-016: Settings API
 
-**Status:** `[ ]`
+**Status:** `[x]`
 **Complexity:** S
 **Dependencies:** TASK-002
 
@@ -385,11 +385,11 @@ Implement API for managing system settings: queue generation time, rate limits, 
 
 **Acceptance Criteria:**
 
-- [ ] `GET /api/settings` returns all settings
-- [ ] `PUT /api/settings` updates settings
-- [ ] Settings: queue_generation_hour, linkedin_weekly_limit, linkedin_daily_limit, cooldown_days, guided_mode, notification_morning, notification_afternoon
-- [ ] Settings stored in database, not env vars
-- [ ] Changes take effect on next relevant operation
+- [x] `GET /api/settings` returns all settings
+- [x] `PUT /api/settings` updates settings
+- [x] Settings: queue_generation_hour, linkedin_weekly_limit, linkedin_daily_limit, cooldown_days, guided_mode, notification_morning, notification_afternoon
+- [x] Settings stored in database, not env vars
+- [x] Changes take effect on next relevant operation
 
 ---
 
