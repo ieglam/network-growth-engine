@@ -525,7 +525,7 @@ Implement CSV import UI with file upload, format selection (LinkedIn vs manual),
 
 ### TASK-023: Daily queue view
 
-**Status:** `[ ]`
+**Status:** `[x]`
 **Complexity:** L
 **Dependencies:** TASK-012, TASK-013, TASK-018
 
@@ -534,17 +534,17 @@ Implement the daily action queue UI showing today's tasks, pre-filled connection
 
 **Acceptance Criteria:**
 
-- [ ] Queue summary at top: X connection requests, Y follow-ups, Z re-engagements
-- [ ] Rate limit status widget: X of 100 this week
-- [ ] List of queue items grouped by action type
-- [ ] Each item shows: contact name, company, action type, connection note preview with **character count (X/300)**
-- [ ] **Flag items where rendered note exceeds 300 chars with warning icon**
-- [ ] Expand item to see full connection note, edit if needed
-- [ ] Action buttons: Done, Skip, Snooze (3 days / 1 week)
-- [ ] Done prompts for optional note
-- [ ] Guided mode: "Show Instructions" shows **"Go to [URL], click Connect, click Add a note, paste: [note]"** with click-to-copy
-- [ ] Batch "Approve & Execute" button (Phase 2: triggers automation)
-- [ ] End-of-day summary accessible
+- [x] Queue summary at top: X connection requests, Y follow-ups, Z re-engagements
+- [x] Rate limit status widget: X of 100 this week
+- [x] List of queue items grouped by action type
+- [x] Each item shows: contact name, company, action type, connection note preview with **character count (X/300)**
+- [x] **Flag items where rendered note exceeds 300 chars with warning icon**
+- [x] Expand item to see full connection note, edit if needed
+- [x] Action buttons: Done, Skip, Snooze (3 days / 1 week)
+- [x] Done prompts for optional note
+- [x] Guided mode: "Show Instructions" shows **"Go to [URL], click Connect, click Add a note, paste: [note]"** with click-to-copy
+- [x] Batch "Approve & Execute" button (Phase 2: triggers automation)
+- [x] End-of-day summary accessible
 
 ---
 

@@ -1,4 +1,10 @@
-import type { ContactStatus, InteractionType, InteractionSource } from '@nge/shared';
+import type {
+  ContactStatus,
+  InteractionType,
+  InteractionSource,
+  QueueItemStatus,
+  QueueActionType,
+} from '@nge/shared';
 
 export interface Contact {
   id: string;
@@ -93,4 +99,50 @@ export interface ContactListResponse {
 export interface ContactDetailResponse {
   success: boolean;
   data: Contact;
+}
+
+// Queue types
+export interface QueueItemContact {
+  id: string;
+  firstName: string;
+  lastName: string;
+  title: string | null;
+  company: string | null;
+  linkedinUrl: string | null;
+  status: ContactStatus;
+  relationshipScore: number;
+}
+
+export interface QueueItemTemplate {
+  id: string;
+  name: string;
+  persona: string | null;
+}
+
+export interface QueueItem {
+  id: string;
+  contactId: string;
+  queueDate: string;
+  actionType: QueueActionType;
+  status: QueueItemStatus;
+  connectionNote: string | null;
+  renderedNote: string | null;
+  templateId: string | null;
+  notes: string | null;
+  executedAt: string | null;
+  result: string | null;
+  snoozeUntil: string | null;
+  createdAt: string;
+  contact: QueueItemContact;
+  template: QueueItemTemplate | null;
+}
+
+export interface QueueSummary {
+  date: string;
+  pending: number;
+  approved: number;
+  executed: number;
+  skipped: number;
+  snoozed: number;
+  total: number;
 }
