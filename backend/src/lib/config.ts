@@ -32,6 +32,9 @@ const configSchema = z.object({
   gmailIntegration: z.coerce.boolean().default(false),
   calendarIntegration: z.coerce.boolean().default(false),
 
+  // LinkedIn Browser
+  linkedinHeadless: z.coerce.boolean().default(false),
+
   // Queue Settings
   queueGenerationHour: z.coerce.number().min(0).max(23).default(7),
 });
@@ -52,6 +55,7 @@ const parsed = configSchema.safeParse({
   linkedinAutomation: process.env.LINKEDIN_AUTOMATION,
   gmailIntegration: process.env.GMAIL_INTEGRATION,
   calendarIntegration: process.env.CALENDAR_INTEGRATION,
+  linkedinHeadless: process.env.LINKEDIN_HEADLESS,
   queueGenerationHour: process.env.QUEUE_GENERATION_HOUR,
 });
 

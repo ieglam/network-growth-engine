@@ -37,6 +37,7 @@ prisma/migrations/*_migration.sql
 
 # Playwright browser data (LinkedIn automation)
 .playwright/
+.linkedin/
 browser-data/
 cookies.json
 
