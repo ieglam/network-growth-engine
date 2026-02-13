@@ -168,3 +168,33 @@ export interface TemplatePreviewResult {
   characterCount: number;
   exceeds300: boolean;
 }
+
+// Duplicate pair types
+export interface DuplicateContact {
+  id: string;
+  firstName: string;
+  lastName: string;
+  title: string | null;
+  company: string | null;
+  linkedinUrl: string | null;
+  email: string | null;
+  phone: string | null;
+  location: string | null;
+  headline: string | null;
+  status: ContactStatus;
+  relationshipScore: number;
+  createdAt: string;
+}
+
+export interface DuplicatePair {
+  id: string;
+  contactAId: string;
+  contactBId: string;
+  matchType: string;
+  confidence: string;
+  status: string;
+  resolvedAt: string | null;
+  createdAt: string;
+  contactA: DuplicateContact;
+  contactB: DuplicateContact;
+}

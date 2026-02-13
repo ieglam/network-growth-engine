@@ -656,7 +656,7 @@ Implement duplicate detection service that runs on import and can be triggered m
 
 ### TASK-029: Duplicate review UI
 
-**Status:** `[ ]`
+**Status:** `[x]`
 **Complexity:** M
 **Dependencies:** TASK-028, TASK-018
 
