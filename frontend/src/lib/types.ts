@@ -146,3 +146,24 @@ export interface QueueSummary {
   snoozed: number;
   total: number;
 }
+
+// Template types
+export interface Template {
+  id: string;
+  name: string;
+  persona: string;
+  subject: string | null;
+  body: string;
+  isActive: boolean;
+  timesUsed: number;
+  acceptances: number;
+  responses: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TemplatePreviewResult {
+  rendered: string;
+  characterCount: number;
+  exceeds300: boolean;
+}

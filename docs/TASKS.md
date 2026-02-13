@@ -550,7 +550,7 @@ Implement the daily action queue UI showing today's tasks, pre-filled connection
 
 ### TASK-024: Template management view
 
-**Status:** `[ ]`
+**Status:** `[x]`
 **Complexity:** M
 **Dependencies:** TASK-010, TASK-011, TASK-018
 
@@ -559,15 +559,15 @@ Implement template list and editor with token insertion, preview, persona assign
 
 **Acceptance Criteria:**
 
-- [ ] Template list showing name, persona, usage count, acceptance rate
-- [ ] Create/Edit form with name, persona, body fields
-- [ ] **Character count displayed live (X/300), warning at 280 (yellow), hard block at 300 (red)**
-- [ ] Token insertion toolbar: click to insert {{first_name}}, etc.
-- [ ] Live preview with sample contact data **showing rendered character count**
-- [ ] Persona dropdown
-- [ ] Active/inactive toggle
-- [ ] Performance stats shown for templates with 20+ uses
-- [ ] "Low sample" badge for templates under 20 uses
+- [x] Template list showing name, persona, usage count, acceptance rate
+- [x] Create/Edit form with name, persona, body fields
+- [x] **Character count displayed live (X/300), warning at 280 (yellow), hard block at 300 (red)**
+- [x] Token insertion toolbar: click to insert {{first_name}}, etc.
+- [x] Live preview with sample contact data **showing rendered character count**
+- [x] Persona dropdown
+- [x] Active/inactive toggle
+- [x] Performance stats shown for templates with 20+ uses
+- [x] "Low sample" badge for templates under 20 uses
 
 ---
 
