@@ -6,6 +6,7 @@ import {
   closeBrowser,
   getBrowserStatus,
 } from '../services/linkedinBrowserService.js';
+import { getRateLimitStatus, enterCooldown } from '../services/linkedinRateLimiter.js';
 
 export async function linkedinRoutes(fastify: FastifyInstance, _options: FastifyPluginOptions) {
   // GET /api/linkedin/status — Get browser and login status
@@ -76,6 +77,25 @@ export async function linkedinRoutes(fastify: FastifyInstance, _options: Fastify
     return {
       success: true,
       data: { message: 'Browser closed' },
+    };
+  });
+
+  // GET /api/linkedin/rate-limit — Get rate limit status
+  fastify.get('/linkedin/rate-limit', async () => {
+    const status = await getRateLimitStatus();
+    return {
+      success: true,
+      data: status,
+    };
+  });
+
+  // POST /api/linkedin/cooldown — Enter cooldown mode
+  fastify.post('/linkedin/cooldown', async (request) => {
+    const { days } = (request.body as { days?: number }) || {};
+    await enterCooldown(days);
+    return {
+      success: true,
+      data: { message: `Cooldown activated for ${days ?? 7} days` },
     };
   });
 }
