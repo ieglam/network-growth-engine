@@ -764,7 +764,7 @@ Implement Redis-based rate limiter for all LinkedIn operations with weekly/daily
 
 ### TASK-036: LinkedIn connection request sender
 
-**Status:** `[ ]`
+**Status:** `[x]`
 **Complexity:** L
 **Dependencies:** TASK-034, TASK-035, TASK-012
 
