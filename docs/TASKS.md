@@ -290,7 +290,7 @@ Implement the nightly batch job that calculates relationship scores for all cont
 
 ### TASK-033: Priority scoring service
 
-**Status:** `[ ]`
+**Status:** `[x]`
 **Complexity:** M
 **Dependencies:** TASK-008, TASK-032
 
@@ -299,14 +299,14 @@ Implement priority scoring for targets using relevance, accessibility, and timin
 
 **Acceptance Criteria:**
 
-- [ ] Calculated for contacts with status "target"
-- [ ] Relevance: category weight × seniority multiplier, normalized 0-10
-- [ ] Accessibility: sum of applicable factors, capped at 10
-- [ ] Timing: sum of active triggers (job change, recent post, etc.)
-- [ ] Priority = (Relevance × 0.5) + (Accessibility × 0.3) + (Timing × 0.2)
-- [ ] Weights configurable via ScoringConfig
-- [ ] Updates contact.priority_score
-- [ ] Runs daily after relationship scoring
+- [x] Calculated for contacts with status "target"
+- [x] Relevance: category weight × seniority multiplier, normalized 0-10
+- [x] Accessibility: sum of applicable factors, capped at 10
+- [x] Timing: sum of active triggers (job change, recent post, etc.)
+- [x] Priority = (Relevance × 0.5) + (Accessibility × 0.3) + (Timing × 0.2)
+- [x] Weights configurable via ScoringConfig
+- [x] Updates contact.priority_score
+- [x] Runs daily after relationship scoring
 
 ---
 
