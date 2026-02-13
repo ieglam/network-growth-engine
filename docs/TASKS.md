@@ -312,7 +312,7 @@ Implement priority scoring for targets using relevance, accessibility, and timin
 
 ### TASK-012: Daily queue generation service
 
-**Status:** `[ ]`
+**Status:** `[x]`
 **Complexity:** L
 **Dependencies:** TASK-004, TASK-010, TASK-011, TASK-033
 
@@ -321,17 +321,17 @@ Implement the daily queue generation logic as a Bull job. Select top targets by 
 
 **Acceptance Criteria:**
 
-- [ ] Bull job `daily-queue-generation` registered
-- [ ] Scheduled to run at configurable time (default 7 AM)
-- [ ] Selects top 15-20 targets by priority_score
-- [ ] Matches template to contact based on persona/category
-- [ ] Renders personalized connection note for each (max 300 chars)
-- [ ] **Flags items where rendered note exceeds 300 chars for manual editing**
-- [ ] Adds follow-ups: connections from last 7 days without first message
-- [ ] Adds re-engagements: score dropped >15 in 30 days
-- [ ] Carries over yesterday's incomplete items
-- [ ] Respects weekly rate limit (doesn't exceed remaining capacity)
-- [ ] Creates QueueItem records with status "pending"
+- [x] Bull job `daily-queue-generation` registered
+- [x] Scheduled to run at configurable time (default 7 AM)
+- [x] Selects top 15-20 targets by priority_score
+- [x] Matches template to contact based on persona/category
+- [x] Renders personalized connection note for each (max 300 chars)
+- [x] **Flags items where rendered note exceeds 300 chars for manual editing**
+- [x] Adds follow-ups: connections from last 7 days without first message
+- [x] Adds re-engagements: score dropped >15 in 30 days
+- [x] Carries over yesterday's incomplete items
+- [x] Respects weekly rate limit (doesn't exceed remaining capacity)
+- [x] Creates QueueItem records with status "pending"
 
 ---
 
