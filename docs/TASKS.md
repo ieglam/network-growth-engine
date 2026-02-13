@@ -591,7 +591,7 @@ Implement category list and editor with relevance weight slider.
 
 ### TASK-026: Dashboard view
 
-**Status:** `[ ]`
+**Status:** `[x]`
 **Complexity:** M
 **Dependencies:** TASK-015, TASK-018
 
@@ -600,14 +600,14 @@ Implement the main dashboard with growth metrics, category breakdown, score dist
 
 **Acceptance Criteria:**
 
-- [ ] Network size progress bar (700 → 7,000)
-- [ ] Growth rate card (weekly/monthly)
-- [ ] Acceptance rate card
-- [ ] Category breakdown chart (pie or bar)
-- [ ] Score distribution chart (cold/warm/active/strong)
-- [ ] "Going cold" alert list (score dropped >15 in 30 days)
-- [ ] Trend line chart (network size over time)
-- [ ] Rate limit status widget
+- [x] Network size progress bar (700 → 7,000)
+- [x] Growth rate card (weekly/monthly)
+- [x] Acceptance rate card
+- [x] Category breakdown chart (pie or bar)
+- [x] Score distribution chart (cold/warm/active/strong)
+- [x] "Going cold" alert list (score dropped >15 in 30 days)
+- [x] Trend line chart (network size over time)
+- [x] Rate limit status widget
 
 ---
 
