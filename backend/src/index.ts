@@ -4,6 +4,7 @@ import helmet from '@fastify/helmet';
 import { config } from './lib/config.js';
 import { healthRoutes } from './routes/health.js';
 import { contactRoutes } from './routes/contacts.js';
+import { importRoutes } from './routes/import.js';
 
 const fastify = Fastify({
   logger: {
@@ -35,6 +36,7 @@ async function buildApp() {
   // Register routes
   await fastify.register(healthRoutes, { prefix: '/api' });
   await fastify.register(contactRoutes, { prefix: '/api' });
+  await fastify.register(importRoutes, { prefix: '/api' });
 
   return fastify;
 }

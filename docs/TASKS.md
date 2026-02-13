@@ -120,7 +120,7 @@ Implement search and filter endpoint for contacts with full-text search, multi-s
 
 ### TASK-006: LinkedIn CSV import
 
-**Status:** `[ ]`
+**Status:** `[x]`
 **Complexity:** M
 **Dependencies:** TASK-004
 
