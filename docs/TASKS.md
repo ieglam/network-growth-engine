@@ -337,7 +337,7 @@ Implement the daily queue generation logic as a Bull job. Select top targets by 
 
 ### TASK-013: Queue item management API
 
-**Status:** `[ ]`
+**Status:** `[x]`
 **Complexity:** S
 **Dependencies:** TASK-012
 
@@ -346,12 +346,12 @@ Implement API for managing queue items: list today's queue, mark items as done/s
 
 **Acceptance Criteria:**
 
-- [ ] `GET /api/queue/today` returns today's queue items
-- [ ] `PUT /api/queue/:id/done` marks done, logs interaction, prompts for note
-- [ ] `PUT /api/queue/:id/skip` marks skipped, applies priority penalty
-- [ ] `PUT /api/queue/:id/snooze` sets snooze_until date
-- [ ] `POST /api/queue/approve` batch approves selected items
-- [ ] `GET /api/queue/summary` returns counts: pending, completed, skipped, snoozed
+- [x] `GET /api/queue/today` returns today's queue items
+- [x] `PUT /api/queue/:id/done` marks done, logs interaction, prompts for note
+- [x] `PUT /api/queue/:id/skip` marks skipped, applies priority penalty
+- [x] `PUT /api/queue/:id/snooze` sets snooze_until date
+- [x] `POST /api/queue/approve` batch approves selected items
+- [x] `GET /api/queue/summary` returns counts: pending, completed, skipped, snoozed
 
 ---
 

@@ -9,6 +9,7 @@ import { categoryRoutes } from './routes/categories.js';
 import { tagRoutes } from './routes/tags.js';
 import { templateRoutes } from './routes/templates.js';
 import { interactionRoutes } from './routes/interactions.js';
+import { queueRoutes } from './routes/queue.js';
 
 const fastify = Fastify({
   logger: {
@@ -45,6 +46,7 @@ async function buildApp() {
   await fastify.register(tagRoutes, { prefix: '/api' });
   await fastify.register(templateRoutes, { prefix: '/api' });
   await fastify.register(interactionRoutes, { prefix: '/api' });
+  await fastify.register(queueRoutes, { prefix: '/api' });
 
   return fastify;
 }
