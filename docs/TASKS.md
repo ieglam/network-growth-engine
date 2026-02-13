@@ -265,7 +265,7 @@ Implement automated status transitions based on relationship score thresholds an
 
 ### TASK-032: Relationship scoring batch job
 
-**Status:** `[ ]`
+**Status:** `[x]`
 **Complexity:** L
 **Dependencies:** TASK-004, TASK-031
 
@@ -274,17 +274,17 @@ Implement the nightly batch job that calculates relationship scores for all cont
 
 **Acceptance Criteria:**
 
-- [ ] Bull job `score-batch-processor` registered
-- [ ] Scheduled to run overnight (2 AM)
-- [ ] Fetches all interactions per contact
-- [ ] Applies base points per interaction type (from ScoringConfig)
-- [ ] Applies 90-day half-life decay
-- [ ] Calculates reciprocity ratio, applies multiplier if ≥30%
-- [ ] Normalizes to 0-100
-- [ ] Updates contact.relationship_score
-- [ ] Logs to ScoreHistory
-- [ ] Triggers status transition check
-- [ ] Processes 10K contacts in <5 minutes
+- [x] Bull job `score-batch-processor` registered
+- [x] Scheduled to run overnight (2 AM)
+- [x] Fetches all interactions per contact
+- [x] Applies base points per interaction type (from ScoringConfig)
+- [x] Applies 90-day half-life decay
+- [x] Calculates reciprocity ratio, applies multiplier if ≥30%
+- [x] Normalizes to 0-100
+- [x] Updates contact.relationship_score
+- [x] Logs to ScoreHistory
+- [x] Triggers status transition check
+- [x] Processes 10K contacts in <5 minutes
 
 ---
 
