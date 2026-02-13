@@ -503,7 +503,7 @@ Implement contact create and edit forms with all fields, validation, category/ta
 
 ### TASK-022: CSV import wizard
 
-**Status:** `[ ]`
+**Status:** `[x]`
 **Complexity:** M
 **Dependencies:** TASK-006, TASK-007, TASK-018
 
@@ -512,14 +512,14 @@ Implement CSV import UI with file upload, format selection (LinkedIn vs manual),
 
 **Acceptance Criteria:**
 
-- [ ] File upload dropzone
-- [ ] Format selection: LinkedIn export or Manual CSV
-- [ ] LinkedIn: automatic mapping, no column selection needed
-- [ ] Manual: column mapping UI with dropdowns
-- [ ] Preview shows first 5 rows with mapped fields
-- [ ] Import button with progress indicator
-- [ ] Results summary: imported, skipped, errors
-- [ ] Error details expandable
+- [x] File upload dropzone
+- [x] Format selection: LinkedIn export or Manual CSV
+- [x] LinkedIn: automatic mapping, no column selection needed
+- [x] Manual: column mapping UI with dropdowns
+- [x] Preview shows first 5 rows with mapped fields
+- [x] Import button with progress indicator
+- [x] Results summary: imported, skipped, errors
+- [x] Error details expandable
 
 ---
 
