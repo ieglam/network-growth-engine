@@ -1,6 +1,12 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
-import type { ContactListResponse, Category, Tag } from '@/lib/types';
+import type {
+  ContactListResponse,
+  ContactDetailResponse,
+  Category,
+  Tag,
+  Interaction,
+} from '@/lib/types';
 
 export interface ContactFilters {
   q?: string;
@@ -35,6 +41,46 @@ export function useContacts(filters: ContactFilters) {
   return useQuery<ContactListResponse>({
     queryKey: ['contacts', qs],
     queryFn: () => apiFetch<ContactListResponse>(`/contacts?${qs}`),
+  });
+}
+
+export function useContact(id: string) {
+  return useQuery<ContactDetailResponse>({
+    queryKey: ['contact', id],
+    queryFn: () => apiFetch<ContactDetailResponse>(`/contacts/${id}`),
+    enabled: !!id,
+  });
+}
+
+export function useContactInteractions(contactId: string) {
+  return useQuery<{ success: boolean; data: Interaction[] }>({
+    queryKey: ['contact-interactions', contactId],
+    queryFn: () => apiFetch(`/contacts/${contactId}/interactions`),
+    enabled: !!contactId,
+  });
+}
+
+export function useUpdateContactStatus() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      contactId,
+      status,
+      reason,
+    }: {
+      contactId: string;
+      status: string;
+      reason?: string;
+    }) => {
+      return apiFetch(`/contacts/${contactId}/status`, {
+        method: 'PUT',
+        body: JSON.stringify({ status, reason }),
+      });
+    },
+    onSuccess: (_data, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['contact', vars.contactId] });
+      queryClient.invalidateQueries({ queryKey: ['contacts'] });
+    },
   });
 }
 

@@ -459,7 +459,7 @@ Implement the contact list view with search, filters, sorting, and bulk actions.
 
 ### TASK-020: Contact detail view
 
-**Status:** `[ ]`
+**Status:** `[x]`
 **Complexity:** M
 **Dependencies:** TASK-004, TASK-018
 
@@ -468,14 +468,14 @@ Implement the contact detail page showing all fields, scores, status timeline, i
 
 **Acceptance Criteria:**
 
-- [ ] Shows all contact fields in organized layout
-- [ ] Displays relationship score with band indicator
-- [ ] Displays priority score (for targets)
-- [ ] Status badge with transition history expandable
-- [ ] Interaction timeline: chronological list with type icons
-- [ ] Conflict flags shown if any exist
-- [ ] Quick actions: edit, change status, add note, add tag, recalculate score
-- [ ] Link to LinkedIn profile (external)
+- [x] Shows all contact fields in organized layout
+- [x] Displays relationship score with band indicator
+- [x] Displays priority score (for targets)
+- [x] Status badge with transition history expandable
+- [x] Interaction timeline: chronological list with type icons
+- [ ] Conflict flags shown if any exist — deferred pending conflict resolution feature
+- [x] Quick actions: edit, change status, add note, add tag, recalculate score
+- [x] Link to LinkedIn profile (external)
 
 ---
 
