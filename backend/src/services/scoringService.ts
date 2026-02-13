@@ -3,6 +3,7 @@ import { ScoringConfigType } from '@prisma/client';
 import { checkStatusTransition, checkDemotion } from './statusTransitionService.js';
 
 const RECIPROCAL_TYPES = new Set([
+  'linkedin_dm_received',
   'linkedin_comment_received',
   'linkedin_like_received',
   'introduction_received',

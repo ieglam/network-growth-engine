@@ -2,6 +2,8 @@ import { FastifyInstance, FastifyPluginOptions } from 'fastify';
 import multipart from '@fastify/multipart';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
+import { calculateContactScore, loadScoringConfig } from '../services/scoringService.js';
+import { checkStatusTransition, checkDemotion } from '../services/statusTransitionService.js';
 
 interface LinkedInRow {
   'First Name'?: string;
@@ -548,6 +550,538 @@ export async function importRoutes(fastify: FastifyInstance, _options: FastifyPl
         flaggedForReview,
         errors,
         totalRows: rows.length,
+      },
+    });
+  });
+
+  // ─── LinkedIn Messages Import ───────────────────────────────────────────────
+
+  const MESSAGE_POINTS: Record<string, number> = {
+    linkedin_dm_sent: 2,
+    linkedin_dm_received: 3,
+  };
+
+  // POST /api/import/linkedin-messages — Import LinkedIn messages.csv
+  fastify.post('/import/linkedin-messages', async (request, reply) => {
+    const file = await request.file();
+
+    if (!file) {
+      return reply.status(400).send({
+        success: false,
+        error: { code: 'NO_FILE', message: 'No file uploaded.' },
+      });
+    }
+
+    if (!file.filename.endsWith('.csv')) {
+      return reply.status(400).send({
+        success: false,
+        error: { code: 'INVALID_FILE_TYPE', message: 'File must be a CSV file.' },
+      });
+    }
+
+    const buffer = await file.toBuffer();
+    const text = buffer.toString('utf-8');
+    const rows = parseCSV(text);
+
+    if (rows.length === 0) {
+      return reply.status(400).send({
+        success: false,
+        error: { code: 'EMPTY_FILE', message: 'CSV file is empty or has no data rows.' },
+      });
+    }
+
+    // Validate expected columns
+    const firstRow = rows[0];
+    const hasRequiredColumns =
+      'FROM' in firstRow && 'SENDER PROFILE URL' in firstRow && 'DATE' in firstRow;
+    if (!hasRequiredColumns) {
+      return reply.status(400).send({
+        success: false,
+        error: {
+          code: 'INVALID_FORMAT',
+          message:
+            'CSV must have columns: FROM, SENDER PROFILE URL, DATE. Expected LinkedIn messages.csv format.',
+        },
+      });
+    }
+
+    // Auto-detect user's LinkedIn profile URL (most frequent sender)
+    const senderUrlCounts = new Map<string, number>();
+    for (const row of rows) {
+      const senderUrl = normalizeLinkedInUrl((row['SENDER PROFILE URL'] || '').trim());
+      if (senderUrl) {
+        senderUrlCounts.set(senderUrl, (senderUrlCounts.get(senderUrl) || 0) + 1);
+      }
+    }
+
+    let userLinkedinUrl: string | null = null;
+    let maxCount = 0;
+    for (const [url, count] of senderUrlCounts) {
+      if (count > maxCount) {
+        maxCount = count;
+        userLinkedinUrl = url;
+      }
+    }
+
+    // Also check settings for user's LinkedIn URL
+    const userUrlSetting = await prisma.settings.findUnique({
+      where: { key: 'user_linkedin_url' },
+    });
+    if (userUrlSetting?.value) {
+      userLinkedinUrl = normalizeLinkedInUrl(userUrlSetting.value) || userLinkedinUrl;
+    }
+
+    if (!userLinkedinUrl) {
+      return reply.status(400).send({
+        success: false,
+        error: {
+          code: 'CANNOT_DETECT_USER',
+          message:
+            'Could not determine your LinkedIn profile URL. Add user_linkedin_url in Settings.',
+        },
+      });
+    }
+
+    // Build lookup maps: LinkedIn URL → contact, and name → contacts
+    const contactsByUrl = new Map<string, { id: string; lastInteractionAt: Date | null }>();
+    const contactsByName = new Map<
+      string,
+      { id: string; lastInteractionAt: Date | null; firstName: string; lastName: string }[]
+    >();
+
+    const allContacts = await prisma.contact.findMany({
+      where: { deletedAt: null },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        linkedinUrl: true,
+        lastInteractionAt: true,
+      },
+    });
+
+    for (const c of allContacts) {
+      if (c.linkedinUrl) {
+        const normalized = normalizeLinkedInUrl(c.linkedinUrl);
+        if (normalized) {
+          contactsByUrl.set(normalized, {
+            id: c.id,
+            lastInteractionAt: c.lastInteractionAt,
+          });
+        }
+      }
+      const nameKey = `${c.firstName.toLowerCase()} ${c.lastName.toLowerCase()}`;
+      if (!contactsByName.has(nameKey)) {
+        contactsByName.set(nameKey, []);
+      }
+      contactsByName.get(nameKey)!.push({
+        id: c.id,
+        lastInteractionAt: c.lastInteractionAt,
+        firstName: c.firstName,
+        lastName: c.lastName,
+      });
+    }
+
+    // Fetch existing interactions for deduplication
+    const existingInteractions = new Set<string>();
+    const allInteractions = await prisma.interaction.findMany({
+      where: {
+        type: { in: ['linkedin_dm_sent', 'linkedin_dm_received'] },
+      },
+      select: { contactId: true, occurredAt: true },
+    });
+    for (const i of allInteractions) {
+      existingInteractions.add(`${i.contactId}|${i.occurredAt.toISOString()}`);
+    }
+
+    let totalParsed = 0;
+    let matched = 0;
+    let interactionsCreated = 0;
+    let unmatchedSkipped = 0;
+    let duplicatesSkipped = 0;
+    const affectedContactIds = new Set<string>();
+    const contactLastDates = new Map<string, Date>();
+    const errors: { row: number; message: string }[] = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      totalParsed++;
+
+      const from = (row['FROM'] || '').trim();
+      const senderProfileUrl = normalizeLinkedInUrl((row['SENDER PROFILE URL'] || '').trim());
+      const dateStr = (row['DATE'] || '').trim();
+      const content = (row['CONTENT'] || '').trim();
+      const subject = (row['SUBJECT'] || '').trim();
+      const conversationId = (row['CONVERSATION ID'] || '').trim();
+
+      if (!dateStr) {
+        errors.push({ row: i + 2, message: 'Missing DATE field' });
+        continue;
+      }
+
+      const occurredAt = new Date(dateStr);
+      if (isNaN(occurredAt.getTime())) {
+        errors.push({ row: i + 2, message: `Invalid date: ${dateStr}` });
+        continue;
+      }
+
+      // Determine direction
+      const isOutbound = senderProfileUrl === userLinkedinUrl;
+
+      // For outbound messages, the other person is the conversation partner (we need to find them)
+      // For inbound messages, the sender IS the other person
+      let contactId: string | null = null;
+
+      if (isOutbound) {
+        // Outbound: we need to find the recipient. LinkedIn messages.csv doesn't have recipient URL.
+        // Use CONVERSATION TITLE which is typically the other person's name
+        const conversationTitle = (row['CONVERSATION TITLE'] || '').trim();
+        if (conversationTitle) {
+          const titleLower = conversationTitle.toLowerCase();
+          const nameMatches = contactsByName.get(titleLower);
+          if (nameMatches && nameMatches.length === 1) {
+            contactId = nameMatches[0].id;
+          } else if (nameMatches && nameMatches.length > 1) {
+            // Multiple matches — use the first one
+            contactId = nameMatches[0].id;
+          }
+        }
+      } else {
+        // Inbound: match sender by URL first, then by name
+        if (senderProfileUrl) {
+          const urlMatch = contactsByUrl.get(senderProfileUrl);
+          if (urlMatch) {
+            contactId = urlMatch.id;
+          }
+        }
+        if (!contactId && from) {
+          const fromLower = from.toLowerCase();
+          const nameMatches = contactsByName.get(fromLower);
+          if (nameMatches && nameMatches.length >= 1) {
+            contactId = nameMatches[0].id;
+          }
+        }
+      }
+
+      if (!contactId) {
+        unmatchedSkipped++;
+        continue;
+      }
+
+      matched++;
+
+      // Deduplication: same contact + same timestamp
+      const dedupeKey = `${contactId}|${occurredAt.toISOString()}`;
+      if (existingInteractions.has(dedupeKey)) {
+        duplicatesSkipped++;
+        continue;
+      }
+      existingInteractions.add(dedupeKey);
+
+      const interactionType = isOutbound ? 'linkedin_dm_sent' : 'linkedin_dm_received';
+      const pointsValue = MESSAGE_POINTS[interactionType as keyof typeof MESSAGE_POINTS] || 0;
+
+      try {
+        await prisma.interaction.create({
+          data: {
+            contactId,
+            type: interactionType,
+            source: 'linkedin',
+            occurredAt,
+            pointsValue,
+            metadata: {
+              ...(content ? { content } : {}),
+              ...(subject ? { subject } : {}),
+              ...(conversationId ? { conversationId } : {}),
+              senderName: from,
+            },
+          },
+        });
+        interactionsCreated++;
+        affectedContactIds.add(contactId);
+
+        // Track latest date per contact
+        const existing = contactLastDates.get(contactId);
+        if (!existing || occurredAt > existing) {
+          contactLastDates.set(contactId, occurredAt);
+        }
+      } catch (err) {
+        errors.push({
+          row: i + 2,
+          message: err instanceof Error ? err.message : 'Unknown error',
+        });
+      }
+    }
+
+    // Update last_interaction_at for affected contacts
+    for (const [cId, lastDate] of contactLastDates) {
+      const contact = await prisma.contact.findUnique({
+        where: { id: cId },
+        select: { lastInteractionAt: true },
+      });
+      if (!contact?.lastInteractionAt || lastDate > contact.lastInteractionAt) {
+        await prisma.contact.update({
+          where: { id: cId },
+          data: { lastInteractionAt: lastDate },
+        });
+      }
+    }
+
+    // Recalculate scores for affected contacts
+    let scoresRecalculated = 0;
+    if (affectedContactIds.size > 0) {
+      const config = await loadScoringConfig();
+      const now = new Date();
+      for (const cId of affectedContactIds) {
+        const newScore = await calculateContactScore(cId, config, now);
+        await prisma.contact.update({
+          where: { id: cId },
+          data: { relationshipScore: newScore },
+        });
+        await checkStatusTransition(cId);
+        await checkDemotion(cId);
+        scoresRecalculated++;
+      }
+    }
+
+    // Save detected user URL to settings if not already there
+    if (!userUrlSetting && userLinkedinUrl) {
+      await prisma.settings.create({
+        data: { key: 'user_linkedin_url', value: userLinkedinUrl },
+      });
+    }
+
+    return reply.status(200).send({
+      success: true,
+      data: {
+        totalParsed,
+        matched,
+        interactionsCreated,
+        unmatchedSkipped,
+        duplicatesSkipped,
+        errors,
+        scoresRecalculated,
+        userLinkedinUrl,
+      },
+    });
+  });
+
+  // ─── LinkedIn Invitations Import ────────────────────────────────────────────
+
+  const INVITATION_POINTS: Record<string, number> = {
+    connection_request_sent: 3,
+    connection_request_accepted: 5,
+  };
+
+  // POST /api/import/linkedin-invitations — Import LinkedIn Invitations.csv
+  fastify.post('/import/linkedin-invitations', async (request, reply) => {
+    const file = await request.file();
+
+    if (!file) {
+      return reply.status(400).send({
+        success: false,
+        error: { code: 'NO_FILE', message: 'No file uploaded.' },
+      });
+    }
+
+    if (!file.filename.endsWith('.csv')) {
+      return reply.status(400).send({
+        success: false,
+        error: { code: 'INVALID_FILE_TYPE', message: 'File must be a CSV file.' },
+      });
+    }
+
+    const buffer = await file.toBuffer();
+    const text = buffer.toString('utf-8');
+    const rows = parseCSV(text);
+
+    if (rows.length === 0) {
+      return reply.status(400).send({
+        success: false,
+        error: { code: 'EMPTY_FILE', message: 'CSV file is empty or has no data rows.' },
+      });
+    }
+
+    // Validate expected columns
+    const firstRow = rows[0];
+    const hasRequiredColumns =
+      'From' in firstRow && 'To' in firstRow && 'Date Sent' in firstRow && 'Direction' in firstRow;
+    if (!hasRequiredColumns) {
+      return reply.status(400).send({
+        success: false,
+        error: {
+          code: 'INVALID_FORMAT',
+          message:
+            'CSV must have columns: From, To, Date Sent, Direction. Expected LinkedIn Invitations.csv format.',
+        },
+      });
+    }
+
+    // Build name → contacts lookup
+    const contactsByName = new Map<string, { id: string; lastInteractionAt: Date | null }[]>();
+    const allContacts = await prisma.contact.findMany({
+      where: { deletedAt: null },
+      select: { id: true, firstName: true, lastName: true, lastInteractionAt: true },
+    });
+    for (const c of allContacts) {
+      const nameKey = `${c.firstName.toLowerCase()} ${c.lastName.toLowerCase()}`;
+      if (!contactsByName.has(nameKey)) {
+        contactsByName.set(nameKey, []);
+      }
+      contactsByName.get(nameKey)!.push({
+        id: c.id,
+        lastInteractionAt: c.lastInteractionAt,
+      });
+    }
+
+    // Fetch existing interactions for deduplication
+    const existingInteractions = new Set<string>();
+    const allInteractions = await prisma.interaction.findMany({
+      where: {
+        type: { in: ['connection_request_sent', 'connection_request_accepted'] },
+      },
+      select: { contactId: true, occurredAt: true, type: true },
+    });
+    for (const i of allInteractions) {
+      existingInteractions.add(`${i.contactId}|${i.type}|${i.occurredAt.toISOString()}`);
+    }
+
+    let totalParsed = 0;
+    let matched = 0;
+    let interactionsCreated = 0;
+    let unmatchedSkipped = 0;
+    let duplicatesSkipped = 0;
+    const affectedContactIds = new Set<string>();
+    const contactLastDates = new Map<string, Date>();
+    const errors: { row: number; message: string }[] = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      totalParsed++;
+
+      const from = (row['From'] || '').trim();
+      const to = (row['To'] || '').trim();
+      const dateSent = (row['Date Sent'] || '').trim();
+      const message = (row['Message'] || '').trim();
+      const direction = (row['Direction'] || '').trim().toUpperCase();
+
+      if (!dateSent) {
+        errors.push({ row: i + 2, message: 'Missing Date Sent field' });
+        continue;
+      }
+
+      const occurredAt = new Date(dateSent);
+      if (isNaN(occurredAt.getTime())) {
+        errors.push({ row: i + 2, message: `Invalid date: ${dateSent}` });
+        continue;
+      }
+
+      // Determine interaction type based on direction
+      const isOutgoing = direction === 'OUTGOING';
+      const interactionType = isOutgoing
+        ? 'connection_request_sent'
+        : 'connection_request_accepted';
+
+      // Match the other person's name
+      const otherPersonName = isOutgoing ? to : from;
+      if (!otherPersonName) {
+        errors.push({ row: i + 2, message: 'Missing contact name' });
+        continue;
+      }
+
+      const nameLower = otherPersonName.toLowerCase();
+      const nameMatches = contactsByName.get(nameLower);
+
+      if (!nameMatches || nameMatches.length === 0) {
+        unmatchedSkipped++;
+        continue;
+      }
+
+      matched++;
+      const contactId = nameMatches[0].id;
+
+      // Deduplication
+      const dedupeKey = `${contactId}|${interactionType}|${occurredAt.toISOString()}`;
+      if (existingInteractions.has(dedupeKey)) {
+        duplicatesSkipped++;
+        continue;
+      }
+      existingInteractions.add(dedupeKey);
+
+      const pointsValue = INVITATION_POINTS[interactionType as keyof typeof INVITATION_POINTS] || 0;
+
+      try {
+        await prisma.interaction.create({
+          data: {
+            contactId,
+            type: interactionType,
+            source: 'linkedin',
+            occurredAt,
+            pointsValue,
+            metadata: {
+              ...(message ? { message } : {}),
+              direction,
+              from,
+              to,
+            },
+          },
+        });
+        interactionsCreated++;
+        affectedContactIds.add(contactId);
+
+        const existing = contactLastDates.get(contactId);
+        if (!existing || occurredAt > existing) {
+          contactLastDates.set(contactId, occurredAt);
+        }
+      } catch (err) {
+        errors.push({
+          row: i + 2,
+          message: err instanceof Error ? err.message : 'Unknown error',
+        });
+      }
+    }
+
+    // Update last_interaction_at for affected contacts
+    for (const [cId, lastDate] of contactLastDates) {
+      const contact = await prisma.contact.findUnique({
+        where: { id: cId },
+        select: { lastInteractionAt: true },
+      });
+      if (!contact?.lastInteractionAt || lastDate > contact.lastInteractionAt) {
+        await prisma.contact.update({
+          where: { id: cId },
+          data: { lastInteractionAt: lastDate },
+        });
+      }
+    }
+
+    // Recalculate scores for affected contacts
+    let scoresRecalculated = 0;
+    if (affectedContactIds.size > 0) {
+      const config = await loadScoringConfig();
+      const now = new Date();
+      for (const cId of affectedContactIds) {
+        const newScore = await calculateContactScore(cId, config, now);
+        await prisma.contact.update({
+          where: { id: cId },
+          data: { relationshipScore: newScore },
+        });
+        await checkStatusTransition(cId);
+        await checkDemotion(cId);
+        scoresRecalculated++;
+      }
+    }
+
+    return reply.status(200).send({
+      success: true,
+      data: {
+        totalParsed,
+        matched,
+        interactionsCreated,
+        unmatchedSkipped,
+        duplicatesSkipped,
+        errors,
+        scoresRecalculated,
       },
     });
   });

@@ -5,6 +5,8 @@ import { prisma } from '../lib/prisma.js';
 
 const INTERACTION_POINTS: Record<string, number> = {
   linkedin_message: 5,
+  linkedin_dm_sent: 2,
+  linkedin_dm_received: 3,
   email: 4,
   meeting_1on1_inperson: 10,
   meeting_1on1_virtual: 8,
@@ -22,6 +24,8 @@ const INTERACTION_POINTS: Record<string, number> = {
 
 const interactionTypes = [
   'linkedin_message',
+  'linkedin_dm_sent',
+  'linkedin_dm_received',
   'email',
   'meeting_1on1_inperson',
   'meeting_1on1_virtual',

@@ -28,6 +28,8 @@ enum Seniority {
 
 enum InteractionType {
   linkedin_message
+  linkedin_dm_sent
+  linkedin_dm_received
   email
   meeting_1on1_inperson
   meeting_1on1_virtual

@@ -1279,3 +1279,56 @@ Monthly job that aggregates daily score history snapshots older than 90 days int
 - [ ] Insert weekly summary records
 - [ ] Delete daily records older than 90 days
 - [ ] Logs: X daily records archived into Y weekly records
+
+---
+
+## Data Import (Phase 1 - Backfill)
+
+### TASK-061: Import LinkedIn messages.csv
+
+**Status:** `[x]`
+**Complexity:** L
+**Dependencies:** TASK-006, TASK-031, TASK-032
+
+**Description:**
+Import LinkedIn messages.csv to backfill interaction history. Parse the LinkedIn messages export format, match messages to existing contacts, create directional interaction records, and recalculate relationship scores.
+
+**Acceptance Criteria:**
+
+- [x] `POST /api/import/linkedin-messages` accepts messages.csv upload
+- [x] Parses LinkedIn format (CONVERSATION ID, CONVERSATION TITLE, FROM, SENDER PROFILE URL, DATE, SUBJECT, CONTENT)
+- [x] Auto-detects user's LinkedIn URL (most frequent sender, or from settings)
+- [x] Matches messages to contacts by LinkedIn profile URL first, then name
+- [x] Creates `linkedin_dm_sent` (outbound) or `linkedin_dm_received` (inbound) interactions
+- [x] Stores message content in interaction metadata JSONB
+- [x] Updates `contact.last_interaction_at` if message is more recent
+- [x] Deduplicates: skips if interaction exists for same contact + same timestamp
+- [x] Returns summary: total parsed, matched, interactions created, unmatched skipped
+- [x] Triggers relationship score recalculation for all affected contacts
+- [x] Saves detected user LinkedIn URL to settings for future imports
+- [x] Frontend import wizard supports Messages import type with result view
+
+---
+
+### TASK-062: Import LinkedIn invitations.csv
+
+**Status:** `[x]`
+**Complexity:** M
+**Dependencies:** TASK-006, TASK-031, TASK-032
+
+**Description:**
+Import LinkedIn Invitations.csv to backfill connection request history. Parse the invitations export format, match to existing contacts by name, create directional interaction records.
+
+**Acceptance Criteria:**
+
+- [x] `POST /api/import/linkedin-invitations` accepts Invitations.csv upload
+- [x] Parses LinkedIn format (From, To, Date Sent, Message, Direction)
+- [x] Matches invitations to contacts by name (From or To depending on direction)
+- [x] OUTGOING invitations create `connection_request_sent` interaction
+- [x] INCOMING invitations create `connection_request_accepted` interaction
+- [x] Stores invitation message in interaction metadata
+- [x] Updates `contact.last_interaction_at` if invitation is more recent
+- [x] Deduplicates: skips if interaction exists for same contact + type + timestamp
+- [x] Returns summary: total parsed, matched, interactions created, unmatched skipped
+- [x] Triggers relationship score recalculation for all affected contacts
+- [x] Frontend import wizard supports Invitations import type with result view
