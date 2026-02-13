@@ -225,7 +225,7 @@ Implement API for connection note templates with personalization tokens. Support
 
 ### TASK-011: Template token rendering
 
-**Status:** `[ ]`
+**Status:** `[x]`
 **Complexity:** S
 **Dependencies:** TASK-010
 

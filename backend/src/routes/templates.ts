@@ -149,4 +149,138 @@ export async function templateRoutes(fastify: FastifyInstance, _options: Fastify
       data: { message: 'Template deleted', id: paramResult.data.id },
     };
   });
+
+  // POST /api/templates/:id/render — Render template with contact data
+  fastify.post('/templates/:id/render', async (request, reply) => {
+    const paramResult = uuidParamSchema.safeParse(request.params);
+    if (!paramResult.success) {
+      return reply.status(400).send({
+        success: false,
+        error: { code: 'VALIDATION_ERROR', message: 'Invalid template ID format' },
+      });
+    }
+
+    const bodyResult = z.object({ contactId: z.string().uuid() }).safeParse(request.body);
+    if (!bodyResult.success) {
+      return reply.status(400).send({
+        success: false,
+        error: { code: 'VALIDATION_ERROR', message: 'contactId is required' },
+      });
+    }
+
+    const template = await prisma.template.findUnique({
+      where: { id: paramResult.data.id },
+    });
+
+    if (!template) {
+      return reply.status(404).send({
+        success: false,
+        error: { code: 'TEMPLATE_NOT_FOUND', message: 'Template not found' },
+      });
+    }
+
+    const contact = await prisma.contact.findFirst({
+      where: { id: bodyResult.data.contactId, deletedAt: null },
+    });
+
+    if (!contact) {
+      return reply.status(404).send({
+        success: false,
+        error: { code: 'CONTACT_NOT_FOUND', message: 'Contact not found' },
+      });
+    }
+
+    const tokenData: Record<string, string> = {
+      first_name: contact.firstName,
+      last_name: contact.lastName,
+      company: contact.company || '',
+      title: contact.title || '',
+      mutual_connection: '',
+      recent_post: '',
+      category_context: '',
+      custom: '',
+    };
+
+    const rendered = renderTemplate(template.body, tokenData);
+
+    return {
+      success: true,
+      data: {
+        rendered,
+        characterCount: rendered.length,
+        exceeds300: rendered.length > TEMPLATE_MAX_LENGTH,
+      },
+    };
+  });
+
+  // POST /api/templates/:id/preview — Preview template with sample data
+  fastify.post('/templates/:id/preview', async (request, reply) => {
+    const paramResult = uuidParamSchema.safeParse(request.params);
+    if (!paramResult.success) {
+      return reply.status(400).send({
+        success: false,
+        error: { code: 'VALIDATION_ERROR', message: 'Invalid template ID format' },
+      });
+    }
+
+    const bodyResult = z
+      .object({
+        first_name: z.string().optional(),
+        last_name: z.string().optional(),
+        company: z.string().optional(),
+        title: z.string().optional(),
+        mutual_connection: z.string().optional(),
+        recent_post: z.string().optional(),
+        category_context: z.string().optional(),
+        custom: z.string().optional(),
+      })
+      .safeParse(request.body);
+
+    if (!bodyResult.success) {
+      return reply.status(400).send({
+        success: false,
+        error: { code: 'VALIDATION_ERROR', message: 'Invalid preview data' },
+      });
+    }
+
+    const template = await prisma.template.findUnique({
+      where: { id: paramResult.data.id },
+    });
+
+    if (!template) {
+      return reply.status(404).send({
+        success: false,
+        error: { code: 'TEMPLATE_NOT_FOUND', message: 'Template not found' },
+      });
+    }
+
+    const tokenData: Record<string, string> = {
+      first_name: '',
+      last_name: '',
+      company: '',
+      title: '',
+      mutual_connection: '',
+      recent_post: '',
+      category_context: '',
+      custom: '',
+      ...bodyResult.data,
+    };
+
+    const rendered = renderTemplate(template.body, tokenData);
+
+    return {
+      success: true,
+      data: {
+        rendered,
+        characterCount: rendered.length,
+        exceeds300: rendered.length > TEMPLATE_MAX_LENGTH,
+      },
+    };
+  });
+}
+
+function renderTemplate(body: string, data: Record<string, string>): string {
+  return body.replace(/\{\{(\w+)\}\}/g, (_match, token: string) => {
+    return data[token] ?? '';
+  });
 }
