@@ -613,7 +613,7 @@ Implement the main dashboard with growth metrics, category breakdown, score dist
 
 ### TASK-027: Settings view
 
-**Status:** `[ ]`
+**Status:** `[x]`
 **Complexity:** S
 **Dependencies:** TASK-016, TASK-018
 
@@ -622,12 +622,12 @@ Implement settings page for configuring system behavior.
 
 **Acceptance Criteria:**
 
-- [ ] Queue generation time picker
-- [ ] Rate limit inputs (weekly, daily)
-- [ ] Cooldown duration input
-- [ ] Guided mode toggle
-- [ ] Notification toggles (morning queue, afternoon overdue)
-- [ ] Save button with success feedback
+- [x] Queue generation time picker
+- [x] Rate limit inputs (weekly, daily)
+- [x] Cooldown duration input
+- [x] Guided mode toggle
+- [x] Notification toggles (morning queue, afternoon overdue)
+- [x] Save button with success feedback
 
 ---
 
