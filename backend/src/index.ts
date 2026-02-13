@@ -5,6 +5,7 @@ import { config } from './lib/config.js';
 import { healthRoutes } from './routes/health.js';
 import { contactRoutes } from './routes/contacts.js';
 import { importRoutes } from './routes/import.js';
+import { categoryRoutes } from './routes/categories.js';
 
 const fastify = Fastify({
   logger: {
@@ -37,6 +38,7 @@ async function buildApp() {
   await fastify.register(healthRoutes, { prefix: '/api' });
   await fastify.register(contactRoutes, { prefix: '/api' });
   await fastify.register(importRoutes, { prefix: '/api' });
+  await fastify.register(categoryRoutes, { prefix: '/api' });
 
   return fastify;
 }

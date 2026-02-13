@@ -162,7 +162,7 @@ Implement generic CSV import with user-defined column mapping. Support any CSV f
 
 ### TASK-008: Category CRUD and assignment
 
-**Status:** `[ ]`
+**Status:** `[x]`
 **Complexity:** S
 **Dependencies:** TASK-002
 
