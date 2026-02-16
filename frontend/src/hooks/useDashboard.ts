@@ -1,83 +1,53 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
 
+export interface SnapshotData {
+  queueCompleted: number;
+  queueTotal: number;
+  pendingActions: number;
+  connectionsSentToday: number;
+}
+
+export interface RateLimitData {
+  dailyUsed: number;
+  dailyLimit: number;
+  weeklyUsed: number;
+  weeklyLimit: number;
+}
+
 export interface GrowthData {
+  snapshot: SnapshotData;
+  acceptanceRate: number;
+  acceptanceTrend: number;
+  totalSent: number;
+  totalAccepted: number;
+  rateLimit: RateLimitData;
   networkSize: number;
-  goal: number;
-  progressPercent: number;
   weeklyGrowth: number;
   monthlyGrowth: number;
-  acceptanceRate: number;
-  totalRequested: number;
-  totalAccepted: number;
 }
 
-export interface CategoryBreakdown {
+export interface ActivityItem {
   id: string;
-  name: string;
-  relevanceWeight: number;
-  totalContacts: number;
-  statusBreakdown: Record<string, number>;
-}
-
-export interface CategoriesData {
-  categories: CategoryBreakdown[];
-  uncategorized: number;
-}
-
-export interface ScoreDistribution {
-  cold: number;
-  warm: number;
-  active: number;
-  strong: number;
-  total: number;
-}
-
-export interface GoingColdContact {
-  id: string;
+  contactId: string;
   firstName: string;
   lastName: string;
-  currentScore: number;
-  previousScore: number;
-  drop: number;
+  fromStatus: string;
+  toStatus: string;
+  createdAt: string;
 }
 
-export interface TopRelationship {
-  id: string;
-  firstName: string;
-  lastName: string;
-  company: string | null;
-  relationshipScore: number;
-  status: string;
+export interface ActivityData {
+  recentActivity: ActivityItem[];
 }
 
-export interface ScoresData {
-  distribution: ScoreDistribution;
-  topRelationships: TopRelationship[];
-  goingCold: GoingColdContact[];
-}
-
-export interface TrendPoint {
-  week: string;
+export interface DailyConnectionPoint {
+  day: string;
   newConnections: number;
 }
 
-export interface ScoreTrendPoint {
-  week: string;
-  avgScore: number;
-}
-
-export interface QueueTrendPoint {
-  week: string;
-  total: number;
-  executed: number;
-  executionRate: number;
-}
-
 export interface TrendsData {
-  networkGrowth: TrendPoint[];
-  averageScore: ScoreTrendPoint[];
-  queueExecution: QueueTrendPoint[];
+  dailyConnections: DailyConnectionPoint[];
 }
 
 export function useDashboardGrowth() {
@@ -87,17 +57,10 @@ export function useDashboardGrowth() {
   });
 }
 
-export function useDashboardCategories() {
-  return useQuery<{ success: boolean; data: CategoriesData }>({
-    queryKey: ['dashboard-categories'],
-    queryFn: () => apiFetch('/dashboard/categories'),
-  });
-}
-
-export function useDashboardScores() {
-  return useQuery<{ success: boolean; data: ScoresData }>({
-    queryKey: ['dashboard-scores'],
-    queryFn: () => apiFetch('/dashboard/scores'),
+export function useDashboardActivity() {
+  return useQuery<{ success: boolean; data: ActivityData }>({
+    queryKey: ['dashboard-activity'],
+    queryFn: () => apiFetch('/dashboard/activity'),
   });
 }
 
