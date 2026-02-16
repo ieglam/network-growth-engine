@@ -2,7 +2,10 @@ import { FastifyInstance, FastifyPluginOptions } from 'fastify';
 import { z } from 'zod';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
-import { manualStatusTransition } from '../services/statusTransitionService.js';
+import {
+  manualStatusTransition,
+  handleConnectionAccepted,
+} from '../services/statusTransitionService.js';
 
 const contactFields = [
   'firstName',
@@ -61,6 +64,7 @@ const listContactsSchema = z.object({
   status: z.string().optional(), // comma-separated
   category: z.string().optional(), // comma-separated UUIDs
   tag: z.string().optional(), // comma-separated UUIDs
+  source: z.string().optional(), // e.g. "apollo", "linkedin", "manual"
   scoreMin: z.coerce.number().int().min(0).max(100).optional(),
   scoreMax: z.coerce.number().int().min(0).max(100).optional(),
   location: z.string().optional(),
@@ -127,7 +131,7 @@ export async function contactRoutes(fastify: FastifyInstance, _options: FastifyP
       });
     }
 
-    const { q, status, category, tag, scoreMin, scoreMax, location, sort, limit, offset } =
+    const { q, status, category, tag, source, scoreMin, scoreMax, location, sort, limit, offset } =
       parseResult.data;
 
     // Full-text search: use raw SQL for ts_rank scoring
@@ -175,12 +179,18 @@ export async function contactRoutes(fastify: FastifyInstance, _options: FastifyP
 
       // Category filter
       if (category) {
-        const categoryIds = category.split(',');
-        const placeholders = categoryIds.map(() => `$${paramIndex++}`);
-        conditions.push(
-          `EXISTS (SELECT 1 FROM contact_categories cc WHERE cc.contact_id = c.id AND cc.category_id IN (${placeholders.join(', ')}))`
-        );
-        params.push(...categoryIds);
+        if (category === '__uncategorized__') {
+          conditions.push(
+            `NOT EXISTS (SELECT 1 FROM contact_categories cc WHERE cc.contact_id = c.id)`
+          );
+        } else {
+          const categoryIds = category.split(',');
+          const placeholders = categoryIds.map(() => `$${paramIndex++}`);
+          conditions.push(
+            `EXISTS (SELECT 1 FROM contact_categories cc WHERE cc.contact_id = c.id AND cc.category_id IN (${placeholders.join(', ')}))`
+          );
+          params.push(...categoryIds);
+        }
       }
 
       // Tag filter
@@ -191,6 +201,13 @@ export async function contactRoutes(fastify: FastifyInstance, _options: FastifyP
           `EXISTS (SELECT 1 FROM contact_tags ct WHERE ct.contact_id = c.id AND ct.tag_id IN (${placeholders.join(', ')}))`
         );
         params.push(...tagIds);
+      }
+
+      // Source filter (checks fieldSources->>'firstName')
+      if (source) {
+        conditions.push(`c.field_sources->>'firstName' = $${paramIndex}`);
+        params.push(source);
+        paramIndex++;
       }
 
       const whereClause = conditions.join(' AND ');
@@ -299,13 +316,21 @@ export async function contactRoutes(fastify: FastifyInstance, _options: FastifyP
     }
 
     if (category) {
-      const categoryIds = category.split(',');
-      where.categories = { some: { categoryId: { in: categoryIds } } };
+      if (category === '__uncategorized__') {
+        where.categories = { none: {} };
+      } else {
+        const categoryIds = category.split(',');
+        where.categories = { some: { categoryId: { in: categoryIds } } };
+      }
     }
 
     if (tag) {
       const tagIds = tag.split(',');
       where.tags = { some: { tagId: { in: tagIds } } };
+    }
+
+    if (source) {
+      where.fieldSources = { path: ['firstName'], equals: source };
     }
 
     const [total, contacts] = await Promise.all([
@@ -331,6 +356,18 @@ export async function contactRoutes(fastify: FastifyInstance, _options: FastifyP
         offset,
         hasMore: offset + limit < total,
       },
+    };
+  });
+
+  // GET /api/contacts/sources — List distinct import sources
+  fastify.get('/contacts/sources', async () => {
+    const rows = await prisma.$queryRawUnsafe<{ source: string }[]>(
+      `SELECT DISTINCT field_sources->>'firstName' as source FROM contacts WHERE deleted_at IS NULL AND field_sources->>'firstName' IS NOT NULL ORDER BY source`
+    );
+
+    return {
+      success: true,
+      data: rows.map((r) => r.source),
     };
   });
 
@@ -528,6 +565,40 @@ export async function contactRoutes(fastify: FastifyInstance, _options: FastifyP
     };
   });
 
+  // POST /api/contacts/bulk-delete — Soft-delete multiple contacts
+  fastify.post('/contacts/bulk-delete', async (request, reply) => {
+    const bodyResult = z
+      .object({
+        contactIds: z.array(z.string().uuid()).min(1),
+      })
+      .safeParse(request.body);
+
+    if (!bodyResult.success) {
+      return reply.status(400).send({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'contactIds must be a non-empty array of UUIDs',
+        },
+      });
+    }
+
+    const { contactIds } = bodyResult.data;
+
+    const result = await prisma.contact.updateMany({
+      where: {
+        id: { in: contactIds },
+        deletedAt: null,
+      },
+      data: { deletedAt: new Date() },
+    });
+
+    return {
+      success: true,
+      data: { deleted: result.count },
+    };
+  });
+
   // PUT /api/contacts/:id/status — Manual status override
   fastify.put('/contacts/:id/status', async (request, reply) => {
     const paramResult = uuidParamSchema.safeParse(request.params);
@@ -591,6 +662,17 @@ export async function contactRoutes(fastify: FastifyInstance, _options: FastifyP
       };
     }
 
+    // If transitioning to "connected", log acceptance interaction and recalc score
+    let acceptanceResult = null;
+    if (result.toStatus === 'connected') {
+      acceptanceResult = await handleConnectionAccepted(
+        paramResult.data.id,
+        result.fromStatus,
+        result.toStatus,
+        'manual'
+      );
+    }
+
     return {
       success: true,
       data: {
@@ -599,6 +681,7 @@ export async function contactRoutes(fastify: FastifyInstance, _options: FastifyP
         toStatus: result.toStatus,
         trigger: result.trigger,
         reason: result.reason,
+        ...(acceptanceResult && { newRelationshipScore: acceptanceResult.newScore }),
       },
     };
   });

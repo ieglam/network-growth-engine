@@ -7,9 +7,14 @@ import {
   useContacts,
   useCategories,
   useTags,
+  useSources,
   useBulkAddTag,
   useBulkRemoveTag,
+  useBulkCategorize,
+  useBulkDelete,
+  useAutoCategorize,
 } from '@/hooks/useContacts';
+import type { AutoCategorizeResult } from '@/hooks/useContacts';
 import type { ContactFilters as Filters } from '@/hooks/useContacts';
 import ContactTable from '@/components/ContactTable';
 import ContactFilters from '@/components/ContactFilters';
@@ -30,13 +35,20 @@ export default function ContactsPage() {
   const [tagFilter, setTagFilter] = useState('');
   const [scoreMin, setScoreMin] = useState('');
   const [scoreMax, setScoreMax] = useState('');
+  const [sourceFilter, setSourceFilter] = useState('');
   const [locationFilter, setLocationFilter] = useState('');
   const [sorting, setSorting] = useState<SortingState>([]);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [page, setPage] = useState(0);
   const [showFilters, setShowFilters] = useState(false);
   const [bulkAction, setBulkAction] = useState('');
   const [bulkTagId, setBulkTagId] = useState('');
+  const [bulkCategoryId, setBulkCategoryId] = useState('');
+  const [autoCategorizeResults, setAutoCategorizeResults] = useState<AutoCategorizeResult[] | null>(
+    null
+  );
+  const [showAutoCategorizeDetails, setShowAutoCategorizeDetails] = useState(false);
   const limit = 50;
 
   // Debounce search
@@ -64,6 +76,7 @@ export default function ContactsPage() {
       status: statusFilter.length > 0 ? statusFilter.join(',') : undefined,
       category: categoryFilter || undefined,
       tag: tagFilter || undefined,
+      source: sourceFilter || undefined,
       scoreMin: scoreMin ? Number(scoreMin) : undefined,
       scoreMax: scoreMax ? Number(scoreMax) : undefined,
       location: locationFilter || undefined,
@@ -76,6 +89,7 @@ export default function ContactsPage() {
       statusFilter,
       categoryFilter,
       tagFilter,
+      sourceFilter,
       scoreMin,
       scoreMax,
       locationFilter,
@@ -87,13 +101,18 @@ export default function ContactsPage() {
   const { data, isLoading, error } = useContacts(filters);
   const { data: catData } = useCategories();
   const { data: tagData } = useTags();
+  const { data: sourcesData } = useSources();
   const bulkAddTag = useBulkAddTag();
   const bulkRemoveTag = useBulkRemoveTag();
+  const bulkCategorize = useBulkCategorize();
+  const bulkDelete = useBulkDelete();
+  const autoCategorize = useAutoCategorize();
 
   const contacts = data?.data ?? [];
   const pagination = data?.pagination;
   const categories = catData?.data ?? [];
   const tags = tagData?.data ?? [];
+  const sources = sourcesData?.data ?? [];
   const selectedIds = Object.keys(rowSelection);
   const totalPages = pagination ? Math.ceil(pagination.total / limit) : 0;
 
@@ -101,6 +120,7 @@ export default function ContactsPage() {
     setStatusFilter([]);
     setCategoryFilter('');
     setTagFilter('');
+    setSourceFilter('');
     setScoreMin('');
     setScoreMax('');
     setLocationFilter('');
@@ -108,15 +128,45 @@ export default function ContactsPage() {
   };
 
   const handleBulkAction = async () => {
-    if (!bulkAction || !bulkTagId || selectedIds.length === 0) return;
-    if (bulkAction === 'add_tag') {
+    if (!bulkAction || selectedIds.length === 0) return;
+
+    if (bulkAction === 'delete') {
+      if (!confirmDelete) {
+        setConfirmDelete(true);
+        return;
+      }
+      bulkDelete.mutate({ contactIds: selectedIds });
+      setConfirmDelete(false);
+    } else if (bulkAction === 'assign_category') {
+      if (!bulkCategoryId) return;
+      bulkCategorize.mutate({ contactIds: selectedIds, categoryId: bulkCategoryId });
+      setBulkCategoryId('');
+    } else if (bulkAction === 'add_tag') {
+      if (!bulkTagId) return;
       bulkAddTag.mutate({ contactIds: selectedIds, tagId: bulkTagId });
     } else if (bulkAction === 'remove_tag') {
+      if (!bulkTagId) return;
       bulkRemoveTag.mutate({ contactIds: selectedIds, tagId: bulkTagId });
     }
+
     setBulkAction('');
     setBulkTagId('');
     setRowSelection({});
+  };
+
+  const handleAutoCategorize = () => {
+    autoCategorize.mutate(
+      {
+        contactIds: selectedIds.length > 0 ? selectedIds : undefined,
+      },
+      {
+        onSuccess: (res) => {
+          setAutoCategorizeResults(res.data.results);
+          setShowAutoCategorizeDetails(false);
+          setRowSelection({});
+        },
+      }
+    );
   };
 
   return (
@@ -130,6 +180,21 @@ export default function ContactsPage() {
               {pagination.total} total
             </span>
           )}
+          <button
+            onClick={handleAutoCategorize}
+            disabled={autoCategorize.isPending}
+            className="px-3 py-1.5 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-gray-300 text-sm font-medium rounded-lg hover:bg-gray-50 dark:hover:bg-slate-800 flex items-center gap-1.5 disabled:opacity-50"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
+              />
+            </svg>
+            {autoCategorize.isPending ? 'Categorizing...' : 'Auto-Categorize'}
+          </button>
           <button
             onClick={() => router.push('/contacts/import')}
             className="px-3 py-1.5 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-gray-300 text-sm font-medium rounded-lg hover:bg-gray-50 dark:hover:bg-slate-800 flex items-center gap-1.5"
@@ -215,6 +280,12 @@ export default function ContactsPage() {
             setTagFilter(t);
             setPage(0);
           }}
+          sourceFilter={sourceFilter}
+          onSourceChange={(s) => {
+            setSourceFilter(s);
+            setPage(0);
+          }}
+          sources={sources}
           scoreMin={scoreMin}
           scoreMax={scoreMax}
           onScoreMinChange={(v) => {
@@ -244,14 +315,35 @@ export default function ContactsPage() {
           </span>
           <select
             value={bulkAction}
-            onChange={(e) => setBulkAction(e.target.value)}
+            onChange={(e) => {
+              setBulkAction(e.target.value);
+              setBulkTagId('');
+              setBulkCategoryId('');
+              setConfirmDelete(false);
+            }}
             className="rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm px-2 py-1 text-gray-700 dark:text-gray-300"
           >
             <option value="">Choose action...</option>
+            <option value="assign_category">Assign category</option>
             <option value="add_tag">Add tag</option>
             <option value="remove_tag">Remove tag</option>
+            <option value="delete">Delete contacts</option>
           </select>
-          {bulkAction && (
+          {bulkAction === 'assign_category' && (
+            <select
+              value={bulkCategoryId}
+              onChange={(e) => setBulkCategoryId(e.target.value)}
+              className="rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm px-2 py-1 text-gray-700 dark:text-gray-300"
+            >
+              <option value="">Select category...</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          )}
+          {(bulkAction === 'add_tag' || bulkAction === 'remove_tag') && (
             <select
               value={bulkTagId}
               onChange={(e) => setBulkTagId(e.target.value)}
@@ -265,7 +357,25 @@ export default function ContactsPage() {
               ))}
             </select>
           )}
-          {bulkAction && bulkTagId && (
+          {bulkAction === 'delete' && (
+            <>
+              {confirmDelete ? (
+                <span className="text-sm text-red-600 dark:text-red-400 font-medium">
+                  Delete {selectedIds.length} contacts?
+                </span>
+              ) : null}
+              <button
+                onClick={handleBulkAction}
+                className={`px-3 py-1 text-white text-sm rounded-md ${
+                  confirmDelete ? 'bg-red-600 hover:bg-red-700' : 'bg-red-500 hover:bg-red-600'
+                }`}
+              >
+                {confirmDelete ? 'Confirm Delete' : 'Delete'}
+              </button>
+            </>
+          )}
+          {((bulkAction === 'assign_category' && bulkCategoryId) ||
+            ((bulkAction === 'add_tag' || bulkAction === 'remove_tag') && bulkTagId)) && (
             <button
               onClick={handleBulkAction}
               className="px-3 py-1 bg-primary-600 text-white text-sm rounded-md hover:bg-primary-700"
@@ -283,6 +393,50 @@ export default function ContactsPage() {
           >
             Clear selection
           </button>
+        </div>
+      )}
+
+      {/* Auto-categorize result banner */}
+      {autoCategorizeResults && (
+        <div className="rounded-lg border border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-900/20 px-4 py-3">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-green-800 dark:text-green-300">
+              {autoCategorizeResults.length} contact
+              {autoCategorizeResults.length !== 1 ? 's' : ''} categorized
+            </span>
+            <div className="flex items-center gap-2">
+              {autoCategorizeResults.length > 0 && (
+                <button
+                  onClick={() => setShowAutoCategorizeDetails(!showAutoCategorizeDetails)}
+                  className="text-xs text-green-700 dark:text-green-400 hover:underline"
+                >
+                  {showAutoCategorizeDetails ? 'Hide details' : 'Show details'}
+                </button>
+              )}
+              <button
+                onClick={() => setAutoCategorizeResults(null)}
+                className="text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-200"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+          </div>
+          {showAutoCategorizeDetails && autoCategorizeResults.length > 0 && (
+            <ul className="mt-2 space-y-1 text-xs text-green-700 dark:text-green-400">
+              {autoCategorizeResults.map((r) => (
+                <li key={r.contactId}>
+                  {r.firstName} {r.lastName} &rarr; {r.category}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
 

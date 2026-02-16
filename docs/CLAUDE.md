@@ -28,11 +28,11 @@ docker-compose down
 ### Database
 
 ```bash
-# Run migrations
+# Run migrations (safe — applies pending migrations without data loss)
 npx prisma migrate dev
 
-# Reset database (destructive)
-npx prisma migrate reset
+# Deploy migrations in production (no interactive prompts)
+npx prisma migrate deploy
 
 # Generate Prisma client
 npx prisma generate
@@ -40,9 +40,21 @@ npx prisma generate
 # Open Prisma Studio (DB browser)
 npx prisma studio
 
-# Seed database
+# Seed database (uses upserts — safe to re-run)
 npm run db:seed
+
+# Backup database to .sql file
+npm run db:backup
 ```
+
+> **NEVER use these commands — they destroy all data:**
+>
+> - `npx prisma migrate reset`
+> - `npx prisma db push --force-reset`
+> - `docker-compose down -v` (the `-v` flag deletes volumes)
+>
+> If migrations fail to apply cleanly, back up first (`npm run db:backup`),
+> then fix the migration SQL manually or create a new migration.
 
 ### Testing
 

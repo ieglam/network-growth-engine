@@ -10,6 +10,7 @@ import {
   useSnoozeItem,
   useBatchApprove,
 } from '@/hooks/useQueue';
+import { useRegenerateQueue } from '@/hooks/useLinkedInSearch';
 import type { QueueItem } from '@/lib/types';
 import { LINKEDIN_NOTE_MAX_LENGTH, LINKEDIN_NOTE_WARNING_LENGTH } from '@nge/shared';
 
@@ -45,22 +46,39 @@ export default function QueuePage() {
   const skipItem = useSkipItem();
   const snoozeItem = useSnoozeItem();
   const batchApprove = useBatchApprove();
+  const regenerateQueue = useRegenerateQueue();
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [doneNotes, setDoneNotes] = useState<Record<string, string>>({});
   const [editedNotes, setEditedNotes] = useState<Record<string, string>>({});
   const [showGuided, setShowGuided] = useState<Record<string, boolean>>({});
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
 
   const items = useMemo(() => queueData?.data ?? [], [queueData?.data]);
   const summary = summaryData?.data;
 
-  // Group items by action type
+  // Sort items: pending/approved first, then executed/skipped/snoozed
+  const STATUS_ORDER: Record<string, number> = {
+    pending: 0,
+    approved: 1,
+    executed: 2,
+    skipped: 3,
+    snoozed: 4,
+  };
+
+  // Group items by action type, sorting within each group by status
   const grouped = useMemo(() => {
     const groups: Record<string, QueueItem[]> = {};
     for (const item of items) {
       if (!groups[item.actionType]) groups[item.actionType] = [];
       groups[item.actionType].push(item);
+    }
+    // Sort each group: active items first, completed last
+    for (const key of Object.keys(groups)) {
+      groups[key].sort(
+        (a, b) => (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9)
+      );
     }
     return groups;
   }, [items]);
@@ -98,9 +116,39 @@ export default function QueuePage() {
     snoozeItem.mutate({ id: item.id, snoozeUntil: addDays(new Date(), days) });
   };
 
+  const toggleChecked = (id: string) => {
+    setCheckedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const toggleAllPending = () => {
+    if (checkedIds.size === pendingIds.length && pendingIds.every((id) => checkedIds.has(id))) {
+      setCheckedIds(new Set());
+    } else {
+      setCheckedIds(new Set(pendingIds));
+    }
+  };
+
+  const checkedPendingIds = pendingIds.filter((id) => checkedIds.has(id));
+
   const handleApproveAll = () => {
     if (pendingIds.length > 0) {
       batchApprove.mutate({ ids: pendingIds });
+      setCheckedIds(new Set());
+    }
+  };
+
+  const handleApproveSelected = () => {
+    if (checkedPendingIds.length > 0) {
+      batchApprove.mutate({ ids: checkedPendingIds });
+      setCheckedIds(new Set());
     }
   };
 
@@ -128,7 +176,16 @@ export default function QueuePage() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Daily Queue</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Daily Queue</h1>
+        <button
+          onClick={() => regenerateQueue.mutate()}
+          disabled={regenerateQueue.isPending}
+          className="px-4 py-2 bg-primary-600 text-white text-sm font-medium rounded-lg hover:bg-primary-700 disabled:opacity-50"
+        >
+          {regenerateQueue.isPending ? 'Regenerating...' : 'Regenerate Queue'}
+        </button>
+      </div>
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -160,15 +217,26 @@ export default function QueuePage() {
                 {summary.snoozed} snoozed
               </span>
             </div>
-            {pendingIds.length > 0 && (
-              <button
-                onClick={handleApproveAll}
-                disabled={batchApprove.isPending}
-                className="px-3 py-1.5 bg-primary-600 text-white text-sm font-medium rounded-lg hover:bg-primary-700 disabled:opacity-50"
-              >
-                Approve All ({pendingIds.length})
-              </button>
-            )}
+            <div className="flex items-center gap-2">
+              {checkedPendingIds.length > 0 && (
+                <button
+                  onClick={handleApproveSelected}
+                  disabled={batchApprove.isPending}
+                  className="px-3 py-1.5 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 disabled:opacity-50"
+                >
+                  Approve Selected ({checkedPendingIds.length})
+                </button>
+              )}
+              {pendingIds.length > 0 && (
+                <button
+                  onClick={handleApproveAll}
+                  disabled={batchApprove.isPending}
+                  className="px-3 py-1.5 bg-primary-600 text-white text-sm font-medium rounded-lg hover:bg-primary-700 disabled:opacity-50"
+                >
+                  Approve All ({pendingIds.length})
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -199,9 +267,24 @@ export default function QueuePage() {
       {/* Grouped queue items */}
       {Object.entries(grouped).map(([actionType, groupItems]) => (
         <div key={actionType} className="space-y-3">
-          <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-            {ACTION_LABELS[actionType] || actionType} ({groupItems.length})
-          </h2>
+          <div className="flex items-center gap-2">
+            {groupItems.some((i) => i.status === 'pending') && (
+              <input
+                type="checkbox"
+                checked={
+                  groupItems
+                    .filter((i) => i.status === 'pending')
+                    .every((i) => checkedIds.has(i.id)) &&
+                  groupItems.some((i) => i.status === 'pending')
+                }
+                onChange={toggleAllPending}
+                className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              />
+            )}
+            <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+              {ACTION_LABELS[actionType] || actionType} ({groupItems.length})
+            </h2>
+          </div>
 
           {groupItems.map((item) => {
             const noteText = getNoteText(item);
@@ -230,6 +313,20 @@ export default function QueuePage() {
                   className="flex items-center gap-3 px-4 py-3 cursor-pointer"
                   onClick={() => setExpandedId(isExpanded ? null : item.id)}
                 >
+                  {/* Checkbox for pending items */}
+                  {item.status === 'pending' && (
+                    <input
+                      type="checkbox"
+                      checked={checkedIds.has(item.id)}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        toggleChecked(item.id);
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 shrink-0"
+                    />
+                  )}
+
                   {/* Action type badge */}
                   <div
                     className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
@@ -246,7 +343,7 @@ export default function QueuePage() {
                         className="font-medium text-gray-900 dark:text-white cursor-pointer hover:text-primary-600"
                         onClick={(e) => {
                           e.stopPropagation();
-                          router.push(`/contacts/${item.contact.id}`);
+                          router.push(`/contacts/${item.contact.id}?from=queue`);
                         }}
                       >
                         {item.contact.firstName} {item.contact.lastName}

@@ -1,7 +1,14 @@
 import dotenv from 'dotenv';
+import path from 'path';
+import fs from 'fs';
 import { z } from 'zod';
 
-dotenv.config();
+// Look for .env in cwd first, then parent directory (monorepo root)
+if (fs.existsSync(path.resolve(process.cwd(), '.env'))) {
+  dotenv.config();
+} else {
+  dotenv.config({ path: path.resolve(process.cwd(), '..', '.env') });
+}
 
 const configSchema = z.object({
   nodeEnv: z.enum(['development', 'production', 'test']).default('development'),

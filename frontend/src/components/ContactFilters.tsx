@@ -19,6 +19,9 @@ interface ContactFiltersProps {
   onCategoryChange: (_cat: string) => void;
   tagFilter: string;
   onTagChange: (_tag: string) => void;
+  sourceFilter: string;
+  onSourceChange: (_source: string) => void;
+  sources: string[];
   scoreMin: string;
   scoreMax: string;
   onScoreMinChange: (_val: string) => void;
@@ -37,6 +40,9 @@ export default function ContactFilters({
   onCategoryChange,
   tagFilter,
   onTagChange,
+  sourceFilter,
+  onSourceChange,
+  sources,
   scoreMin,
   scoreMax,
   onScoreMinChange,
@@ -51,6 +57,7 @@ export default function ContactFilters({
     statusFilter.length > 0 ||
     categoryFilter ||
     tagFilter ||
+    sourceFilter ||
     scoreMin ||
     scoreMax ||
     locationFilter;
@@ -108,6 +115,7 @@ export default function ContactFilters({
           className="w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm px-3 py-1.5 text-gray-700 dark:text-gray-300"
         >
           <option value="">All categories</option>
+          <option value="__uncategorized__">Uncategorized</option>
           {categories.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
@@ -130,6 +138,25 @@ export default function ContactFilters({
           {tags.map((t) => (
             <option key={t.id} value={t.id}>
               {t.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Source filter */}
+      <div>
+        <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">
+          Import Source
+        </label>
+        <select
+          value={sourceFilter}
+          onChange={(e) => onSourceChange(e.target.value)}
+          className="w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm px-3 py-1.5 text-gray-700 dark:text-gray-300"
+        >
+          <option value="">All sources</option>
+          {sources.map((s) => (
+            <option key={s} value={s}>
+              {s.charAt(0).toUpperCase() + s.slice(1)}
             </option>
           ))}
         </select>

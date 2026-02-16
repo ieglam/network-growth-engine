@@ -1,6 +1,8 @@
 import { FastifyInstance, FastifyPluginOptions } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
+import { calculateContactScore, loadScoringConfig } from '../services/scoringService.js';
+import { manualStatusTransition } from '../services/statusTransitionService.js';
 
 const uuidParamSchema = z.object({
   id: z.string().uuid(),
@@ -130,7 +132,32 @@ export async function queueRoutes(fastify: FastifyInstance, _options: FastifyPlu
       data: { lastInteractionAt: now },
     });
 
-    return { success: true, data: updated };
+    // Auto-transition: connection_request done → status "requested"
+    let statusTransition = null;
+    if (item.actionType === 'connection_request') {
+      statusTransition = await manualStatusTransition(
+        item.contactId,
+        'requested',
+        'Connection request sent via queue'
+      );
+    }
+
+    // Recalculate relationship score immediately
+    const config = await loadScoringConfig();
+    const newScore = await calculateContactScore(item.contactId, config, now);
+    await prisma.contact.update({
+      where: { id: item.contactId },
+      data: { relationshipScore: newScore },
+    });
+
+    return {
+      success: true,
+      data: {
+        ...updated,
+        statusTransition,
+        newRelationshipScore: newScore,
+      },
+    };
   });
 
   // PUT /api/queue/:id/skip — Mark item as skipped

@@ -121,20 +121,35 @@ export async function isLoggedIn(): Promise<boolean> {
       timeout: 15000,
     });
 
+    // Wait a moment for any redirects to settle
+    await page.waitForTimeout(2000);
+
     // If redirected to login page, we're not logged in
     const url = page.url();
-    if (url.includes('/login') || url.includes('/authwall') || url.includes('/uas/')) {
+    if (
+      url.includes('/login') ||
+      url.includes('/authwall') ||
+      url.includes('/uas/') ||
+      url.includes('/checkpoint')
+    ) {
       return false;
     }
 
-    // Check for feed content or profile nav
-    const feedExists = await page
-      .locator('[data-test-id="feed-sort-dropdown"], .feed-shared-update-v2, .global-nav')
+    // If we're still on /feed or any authenticated page, we're logged in
+    if (url.includes('/feed') || url.includes('/mynetwork') || url.includes('/messaging')) {
+      return true;
+    }
+
+    // Fallback: check for any nav or feed element (broad selectors)
+    const loggedIn = await page
+      .locator(
+        'nav, .global-nav, .global-nav__me, [data-test-id="feed-sort-dropdown"], .feed-shared-update-v2, .scaffold-layout'
+      )
       .first()
       .isVisible({ timeout: 5000 })
       .catch(() => false);
 
-    return feedExists;
+    return loggedIn;
   } catch {
     return false;
   } finally {

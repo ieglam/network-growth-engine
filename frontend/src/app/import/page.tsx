@@ -4,7 +4,7 @@ import React, { useState, useCallback } from 'react';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
 
-type ImportType = 'connections' | 'messages' | 'invitations';
+type ImportType = 'connections' | 'messages' | 'invitations' | 'apollo';
 
 interface ConnectionsResult {
   imported: number;
@@ -57,12 +57,19 @@ const IMPORT_TYPES: { key: ImportType; label: string; description: string; file:
     description: 'Import invitation history to track connection request activity',
     file: 'Invitations.csv',
   },
+  {
+    key: 'apollo',
+    label: 'Apollo Export',
+    description: 'Import contacts from Apollo.io prospecting lists',
+    file: '.xlsx',
+  },
 ];
 
 const API_ENDPOINTS: Record<ImportType, string> = {
   connections: '/import/linkedin',
   messages: '/import/linkedin-messages',
   invitations: '/import/linkedin-invitations',
+  apollo: '/import/apollo',
 };
 
 export default function ImportPage() {
@@ -73,17 +80,22 @@ export default function ImportPage() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ImportResult | null>(null);
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOver(false);
-    const droppedFile = e.dataTransfer.files[0];
-    if (droppedFile && droppedFile.name.endsWith('.csv')) {
-      setFile(droppedFile);
-      setError(null);
-    } else {
-      setError('Please drop a CSV file');
-    }
-  }, []);
+  const acceptedExtension = importType === 'apollo' ? '.xlsx' : '.csv';
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setDragOver(false);
+      const droppedFile = e.dataTransfer.files[0];
+      if (droppedFile && droppedFile.name.endsWith(acceptedExtension)) {
+        setFile(droppedFile);
+        setError(null);
+      } else {
+        setError(`Please drop a ${acceptedExtension.toUpperCase().replace('.', '')} file`);
+      }
+    },
+    [acceptedExtension]
+  );
 
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.files?.[0];
@@ -310,7 +322,12 @@ export default function ImportPage() {
                 <p className="text-xs text-gray-400 dark:text-gray-500">or</p>
                 <label className="inline-block px-4 py-2 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer hover:bg-gray-50 dark:hover:bg-slate-600">
                   Browse files
-                  <input type="file" accept=".csv" onChange={handleFileSelect} className="hidden" />
+                  <input
+                    type="file"
+                    accept={acceptedExtension}
+                    onChange={handleFileSelect}
+                    className="hidden"
+                  />
                 </label>
               </div>
             )}
@@ -353,6 +370,11 @@ export default function ImportPage() {
       {/* Result step — Invitations */}
       {step === 'result' && result && importType === 'invitations' && (
         <InvitationsResultView result={result as InvitationsResult} onReset={handleReset} />
+      )}
+
+      {/* Result step — Apollo */}
+      {step === 'result' && result && importType === 'apollo' && (
+        <ConnectionsResultView result={result as ConnectionsResult} onReset={handleReset} />
       )}
     </div>
   );

@@ -13,6 +13,7 @@ export interface ContactFilters {
   status?: string;
   category?: string;
   tag?: string;
+  source?: string;
   scoreMin?: number;
   scoreMax?: number;
   location?: string;
@@ -27,6 +28,7 @@ function buildQueryString(filters: ContactFilters): string {
   if (filters.status) params.set('status', filters.status);
   if (filters.category) params.set('category', filters.category);
   if (filters.tag) params.set('tag', filters.tag);
+  if (filters.source) params.set('source', filters.source);
   if (filters.scoreMin !== undefined) params.set('scoreMin', String(filters.scoreMin));
   if (filters.scoreMax !== undefined) params.set('scoreMax', String(filters.scoreMax));
   if (filters.location) params.set('location', filters.location);
@@ -113,6 +115,86 @@ export function useBulkAddTag() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['contacts'] });
+    },
+  });
+}
+
+export function useSources() {
+  return useQuery<{ success: boolean; data: string[] }>({
+    queryKey: ['contact-sources'],
+    queryFn: () => apiFetch('/contacts/sources'),
+  });
+}
+
+export function useBulkDelete() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ contactIds }: { contactIds: string[] }) => {
+      return apiFetch<{ success: boolean; data: { deleted: number } }>('/contacts/bulk-delete', {
+        method: 'POST',
+        body: JSON.stringify({ contactIds }),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['contacts'] });
+      queryClient.invalidateQueries({ queryKey: ['categories'] });
+      queryClient.invalidateQueries({ queryKey: ['contact-sources'] });
+    },
+  });
+}
+
+export function useBulkCategorize() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      contactIds,
+      categoryId,
+      replace,
+    }: {
+      contactIds: string[];
+      categoryId: string;
+      replace?: boolean;
+    }) => {
+      return apiFetch('/contacts/bulk-categorize', {
+        method: 'POST',
+        body: JSON.stringify({ contactIds, categoryId, replace }),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['contacts'] });
+      queryClient.invalidateQueries({ queryKey: ['categories'] });
+    },
+  });
+}
+
+export interface AutoCategorizeResult {
+  contactId: string;
+  firstName: string;
+  lastName: string;
+  category: string;
+}
+
+export interface AutoCategorizeResponse {
+  success: boolean;
+  data: {
+    categorized: number;
+    results: AutoCategorizeResult[];
+    skipped: number;
+  };
+}
+
+export function useAutoCategorize() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ contactIds, dryRun }: { contactIds?: string[]; dryRun?: boolean }) => {
+      return apiFetch<AutoCategorizeResponse>('/contacts/auto-categorize', {
+        method: 'POST',
+        body: JSON.stringify({ contactIds, dryRun }),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['contacts'] });
+      queryClient.invalidateQueries({ queryKey: ['categories'] });
     },
   });
 }

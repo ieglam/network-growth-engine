@@ -39,8 +39,10 @@ async function main() {
     { key: 'introduction_given', value: 10 },
     { key: 'introduction_received', value: 10 },
     { key: 'manual_note', value: 8 },
-    { key: 'connection_request_sent', value: 0 },
+    { key: 'connection_request_sent', value: 3 },
     { key: 'connection_request_accepted', value: 2 },
+    { key: 'linkedin_dm_sent', value: 2 },
+    { key: 'linkedin_dm_received', value: 3 },
   ];
 
   for (const w of relationshipWeights) {

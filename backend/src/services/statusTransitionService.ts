@@ -1,5 +1,6 @@
 import { prisma } from '../lib/prisma.js';
 import { ContactStatus, InteractionType, StatusTransitionTrigger } from '@prisma/client';
+import { calculateContactScore, loadScoringConfig } from './scoringService.js';
 
 const RECIPROCAL_INTERACTION_TYPES: InteractionType[] = [
   'linkedin_comment_received',
@@ -158,6 +159,48 @@ export async function manualStatusTransition(
     'manual',
     reason || `Manual status change to ${newStatus}`
   );
+}
+
+/**
+ * Handle a connection acceptance: log the interaction, update timestamps,
+ * recalculate the relationship score, and check for further promotions.
+ * Reusable by both manual status dropdown and automated acceptance detector.
+ */
+export async function handleConnectionAccepted(
+  contactId: string,
+  fromStatus: ContactStatus,
+  toStatus: ContactStatus,
+  source: 'manual' | 'automated' = 'manual'
+): Promise<{ interaction: { id: string }; newScore: number }> {
+  const now = new Date();
+
+  const interaction = await prisma.interaction.create({
+    data: {
+      contactId,
+      type: 'connection_request_accepted',
+      source,
+      occurredAt: now,
+      pointsValue: 2,
+      metadata: { fromStatus, toStatus },
+    },
+  });
+
+  await prisma.contact.update({
+    where: { id: contactId },
+    data: { lastInteractionAt: now },
+  });
+
+  const config = await loadScoringConfig();
+  const newScore = await calculateContactScore(contactId, config, now);
+  await prisma.contact.update({
+    where: { id: contactId },
+    data: { relationshipScore: newScore },
+  });
+
+  // Check if the new score qualifies for further promotion
+  await checkStatusTransition(contactId);
+
+  return { interaction: { id: interaction.id }, newScore };
 }
 
 async function applyTransition(

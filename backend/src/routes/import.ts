@@ -1,6 +1,7 @@
 import { FastifyInstance, FastifyPluginOptions } from 'fastify';
 import multipart from '@fastify/multipart';
 import { z } from 'zod';
+import * as XLSX from 'xlsx';
 import { prisma } from '../lib/prisma.js';
 import { calculateContactScore, loadScoringConfig } from '../services/scoringService.js';
 import { checkStatusTransition, checkDemotion } from '../services/statusTransitionService.js';
@@ -528,6 +529,301 @@ export async function importRoutes(fastify: FastifyInstance, _options: FastifyPl
         existingByNameCompany.add(
           `${firstName.toLowerCase()}|${lastName.toLowerCase()}|${(company || '').toLowerCase()}`
         );
+
+        imported++;
+      } catch (err: unknown) {
+        if (err instanceof Error && err.message.includes('Unique constraint failed')) {
+          duplicatesSkipped++;
+        } else {
+          errors.push({
+            row: i + 2,
+            message: err instanceof Error ? err.message : 'Unknown error',
+          });
+        }
+      }
+    }
+
+    return reply.status(200).send({
+      success: true,
+      data: {
+        imported,
+        duplicatesSkipped,
+        flaggedForReview,
+        errors,
+        totalRows: rows.length,
+      },
+    });
+  });
+
+  // ─── Apollo XLSX Import ──────────────────────────────────────────────────────
+
+  function parseSeniority(raw: string | undefined): string | null {
+    if (!raw) return null;
+    const token = raw.split(',')[0].trim().toLowerCase();
+    if (
+      token.includes('c-suite') ||
+      token.includes('founder') ||
+      token.includes('owner') ||
+      token.includes('executive')
+    )
+      return 'c_suite';
+    if (token.includes('vp') || token.includes('vice president')) return 'vp';
+    if (token.includes('director')) return 'director';
+    if (token.includes('manager')) return 'manager';
+    return null;
+  }
+
+  // POST /api/import/apollo — Import Apollo XLSX export
+  fastify.post('/import/apollo', async (request, reply) => {
+    const file = await request.file();
+
+    if (!file) {
+      return reply.status(400).send({
+        success: false,
+        error: {
+          code: 'NO_FILE',
+          message: 'No file uploaded. Send an XLSX file as multipart form data.',
+        },
+      });
+    }
+
+    if (
+      file.mimetype !== 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' &&
+      !file.filename.endsWith('.xlsx')
+    ) {
+      return reply.status(400).send({
+        success: false,
+        error: { code: 'INVALID_FILE_TYPE', message: 'File must be an XLSX file.' },
+      });
+    }
+
+    const buffer = await file.toBuffer();
+    const workbook = XLSX.read(buffer);
+    const sheetName = workbook.SheetNames[0];
+    if (!sheetName) {
+      return reply.status(400).send({
+        success: false,
+        error: { code: 'EMPTY_FILE', message: 'XLSX file has no sheets.' },
+      });
+    }
+
+    const rows = XLSX.utils.sheet_to_json<Record<string, string>>(workbook.Sheets[sheetName], {
+      defval: '',
+      raw: false,
+    });
+    if (rows.length === 0) {
+      return reply.status(400).send({
+        success: false,
+        error: { code: 'EMPTY_FILE', message: 'XLSX file has no data rows.' },
+      });
+    }
+
+    // Build duplicate detection sets
+    const existingByUrl = new Map<string, string>();
+    const urlContacts = await prisma.contact.findMany({
+      where: { linkedinUrl: { not: null }, deletedAt: null },
+      select: { id: true, linkedinUrl: true },
+    });
+    for (const c of urlContacts) {
+      if (c.linkedinUrl) {
+        const normalized = normalizeLinkedInUrl(c.linkedinUrl);
+        if (normalized) existingByUrl.set(normalized, c.id);
+      }
+    }
+
+    const existingByEmail = new Set<string>();
+    const emailContacts = await prisma.contact.findMany({
+      where: { email: { not: null }, deletedAt: null },
+      select: { email: true },
+    });
+    for (const c of emailContacts) {
+      if (c.email) existingByEmail.add(c.email.toLowerCase());
+    }
+
+    const existingByNameCompany = new Set<string>();
+    const allContacts = await prisma.contact.findMany({
+      where: { deletedAt: null },
+      select: { firstName: true, lastName: true, company: true },
+    });
+    for (const c of allContacts) {
+      existingByNameCompany.add(
+        `${c.firstName.toLowerCase()}|${c.lastName.toLowerCase()}|${(c.company || '').toLowerCase()}`
+      );
+    }
+
+    // Intra-batch dedup sets
+    const seenUrlsInBatch = new Set<string>();
+    const seenEmailsInBatch = new Set<string>();
+    const seenNameCompanyInBatch = new Set<string>();
+
+    // Category cache
+    const categoryCache = new Map<string, string>();
+    const existingCategories = await prisma.category.findMany({ select: { id: true, name: true } });
+    for (const cat of existingCategories) {
+      categoryCache.set(cat.name.toLowerCase(), cat.id);
+    }
+
+    let imported = 0;
+    let duplicatesSkipped = 0;
+    const flaggedForReview: {
+      firstName: string;
+      lastName: string;
+      company: string;
+      reason: string;
+    }[] = [];
+    const errors: { row: number; message: string }[] = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const firstName = (row['First Name'] || '').trim();
+      const lastName = (row['Last Name'] || '').trim();
+
+      if (!firstName && !lastName) {
+        continue; // skip rows with no name
+      }
+
+      const linkedinUrl = normalizeLinkedInUrl(row['Person Linkedin Url'] || '');
+      const email = (row['Email'] || '').trim().toLowerCase() || null;
+      const company = (row['Company Name'] || row['Company'] || '').trim() || null;
+      const title = (row['Title'] || '').trim() || null;
+      const phone = (row['Work Direct Phone'] || row['Mobile Phone'] || '').trim() || null;
+
+      // Build location from City, State, Country
+      const locationParts = [
+        (row['City'] || '').trim(),
+        (row['State'] || '').trim(),
+        (row['Country'] || '').trim(),
+      ].filter(Boolean);
+      const location = locationParts.length > 0 ? locationParts.join(', ') : null;
+
+      const seniority = parseSeniority(row['Seniority']);
+
+      // Duplicate detection layer 1: LinkedIn URL
+      if (linkedinUrl) {
+        if (existingByUrl.has(linkedinUrl) || seenUrlsInBatch.has(linkedinUrl)) {
+          duplicatesSkipped++;
+          continue;
+        }
+        seenUrlsInBatch.add(linkedinUrl);
+      }
+
+      // Duplicate detection layer 2: Email
+      if (email) {
+        if (existingByEmail.has(email) || seenEmailsInBatch.has(email)) {
+          duplicatesSkipped++;
+          continue;
+        }
+        seenEmailsInBatch.add(email);
+      }
+
+      // Duplicate detection layer 3: firstName+lastName+company
+      if (company) {
+        const nameCompanyKey = `${firstName.toLowerCase()}|${lastName.toLowerCase()}|${company.toLowerCase()}`;
+        if (
+          existingByNameCompany.has(nameCompanyKey) ||
+          seenNameCompanyInBatch.has(nameCompanyKey)
+        ) {
+          flaggedForReview.push({
+            firstName,
+            lastName,
+            company,
+            reason: 'Name + company match found — skipped as potential duplicate',
+          });
+          duplicatesSkipped++;
+          continue;
+        }
+        seenNameCompanyInBatch.add(nameCompanyKey);
+      }
+
+      // Build metadata from extra Apollo fields
+      const metadata: Record<string, string> = {};
+      const metaFields: [string, string][] = [
+        ['Industry', 'industry'],
+        ['Keywords', 'keywords'],
+        ['Technologies', 'technologies'],
+        ['Annual Revenue', 'annualRevenue'],
+        ['# Employees', 'employees'],
+        ['Apollo Contact Id', 'apolloContactId'],
+        ['Apollo Account Id', 'apolloAccountId'],
+        ['Stage', 'stage'],
+        ['Departments', 'departments'],
+        ['Email Status', 'emailStatus'],
+      ];
+      for (const [header, key] of metaFields) {
+        const val = (row[header] || '').trim();
+        if (val) metadata[key] = val;
+      }
+
+      // Category assignment from Lists column
+      const listName = (row['Lists'] || '').trim();
+      let categoryId: string;
+      if (listName) {
+        const catKey = listName.toLowerCase();
+        if (!categoryCache.has(catKey)) {
+          const newCat = await prisma.category.create({
+            data: { name: listName, relevanceWeight: 3 },
+          });
+          categoryCache.set(catKey, newCat.id);
+        }
+        categoryId = categoryCache.get(catKey)!;
+      } else {
+        const uncatKey = 'uncategorized';
+        if (!categoryCache.has(uncatKey)) {
+          const uncat = await prisma.category.upsert({
+            where: { name: 'Uncategorized' },
+            update: {},
+            create: { name: 'Uncategorized', relevanceWeight: 1 },
+          });
+          categoryCache.set(uncatKey, uncat.id);
+        }
+        categoryId = categoryCache.get(uncatKey)!;
+      }
+
+      // Build field sources
+      const fieldSources: Record<string, string> = {
+        firstName: 'apollo',
+        lastName: 'apollo',
+      };
+      if (linkedinUrl) fieldSources.linkedinUrl = 'apollo';
+      if (email) fieldSources.email = 'apollo';
+      if (company) fieldSources.company = 'apollo';
+      if (title) fieldSources.title = 'apollo';
+      if (phone) fieldSources.phone = 'apollo';
+      if (location) fieldSources.location = 'apollo';
+      if (seniority) fieldSources.seniority = 'apollo';
+
+      try {
+        const contact = await prisma.contact.create({
+          data: {
+            firstName: firstName || '',
+            lastName: lastName || '',
+            linkedinUrl,
+            email,
+            company,
+            title,
+            phone,
+            location,
+            status: 'target',
+            seniority:
+              (seniority as 'ic' | 'manager' | 'director' | 'vp' | 'c_suite' | undefined) ??
+              undefined,
+            fieldSources,
+            metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
+          },
+        });
+
+        await prisma.contactCategory.create({
+          data: { contactId: contact.id, categoryId },
+        });
+
+        // Track for intra-import dedup
+        if (linkedinUrl) existingByUrl.set(linkedinUrl, contact.id);
+        if (email) existingByEmail.add(email);
+        if (company) {
+          existingByNameCompany.add(
+            `${firstName.toLowerCase()}|${lastName.toLowerCase()}|${company.toLowerCase()}`
+          );
+        }
 
         imported++;
       } catch (err: unknown) {

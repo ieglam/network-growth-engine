@@ -82,6 +82,20 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
+    label: 'Find Targets',
+    href: '/find-targets',
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+        />
+      </svg>
+    ),
+  },
+  {
     label: 'Duplicates',
     href: '/duplicates',
     icon: (
@@ -168,7 +182,9 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                 />
               </svg>
             </div>
-            <span className="text-lg font-bold text-gray-900 dark:text-white">NGE</span>
+            <span className="text-lg font-bold text-gray-900 dark:text-white">
+              Network Growth Engine
+            </span>
           </div>
           {/* Close button (mobile) */}
           <button
