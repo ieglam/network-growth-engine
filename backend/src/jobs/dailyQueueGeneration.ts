@@ -1,5 +1,7 @@
 import { Worker, Queue } from 'bullmq';
 import { generateDailyQueue } from '../services/queueGenerationService.js';
+import { sendQueueReadyEmail } from '../services/emailService.js';
+import { prisma } from '../lib/prisma.js';
 
 const QUEUE_NAME = 'daily-queue-generation';
 
@@ -28,6 +30,29 @@ export function createDailyQueueWorker(redisUrl: string) {
           `(${result.flaggedForEditing} flagged for editing)`
       );
 
+      // Send email notification if items were generated
+      if (result.total > 0) {
+        const today = new Date();
+        const queueDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+        const queueItems = await prisma.queueItem.findMany({
+          where: { queueDate },
+          include: {
+            contact: { select: { firstName: true, lastName: true, company: true, linkedinUrl: true } },
+          },
+          orderBy: { createdAt: 'asc' },
+        });
+
+        const emailItems = queueItems.map((item) => ({
+          contactName: `${item.contact.firstName} ${item.contact.lastName}`,
+          company: item.contact.company,
+          actionType: item.actionType,
+          linkedinUrl: item.contact.linkedinUrl,
+        }));
+
+        await sendQueueReadyEmail(emailItems, queueDate);
+      }
+
       return result;
     },
     {
@@ -45,14 +70,14 @@ export function createDailyQueueWorker(redisUrl: string) {
 
 /**
  * Schedule daily queue generation.
- * Default: 7 AM. Pass hour to override.
+ * Default: 7 AM Moscow time. Pass hour to override.
  */
 export async function scheduleDailyQueue(queue: Queue, hour: number = 7) {
   await queue.upsertJobScheduler(
     'daily-queue',
-    { pattern: `0 ${hour} * * *` },
+    { pattern: `0 ${hour} * * *`, tz: 'America/Mexico_City' },
     { name: 'generate-queue' }
   );
 
-  console.log(`[${QUEUE_NAME}] Scheduled daily at ${hour}:00 AM`);
+  console.log(`[${QUEUE_NAME}] Scheduled daily at ${hour}:00 AM America/Mexico_City`);
 }

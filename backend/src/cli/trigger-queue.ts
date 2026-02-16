@@ -1,4 +1,7 @@
+import 'dotenv/config';
 import { generateDailyQueue } from '../services/queueGenerationService.js';
+import { sendQueueReadyEmail } from '../services/emailService.js';
+import { prisma } from '../lib/prisma.js';
 
 async function main() {
   console.log('Triggering daily queue generation for today...');
@@ -13,6 +16,31 @@ async function main() {
   console.log(`  Carried over:       ${result.carriedOver}`);
   console.log(`  Flagged for editing: ${result.flaggedForEditing}`);
   console.log(`  Total:              ${result.total}`);
+
+  if (result.total > 0) {
+    const today = new Date();
+    const queueDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+    const queueItems = await prisma.queueItem.findMany({
+      where: { queueDate },
+      include: {
+        contact: { select: { firstName: true, lastName: true, company: true, linkedinUrl: true } },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const emailItems = queueItems.map((item) => ({
+      contactName: `${item.contact.firstName} ${item.contact.lastName}`,
+      company: item.contact.company,
+      actionType: item.actionType,
+      linkedinUrl: item.contact.linkedinUrl,
+    }));
+
+    await sendQueueReadyEmail(emailItems, queueDate);
+  } else {
+    console.log('No items generated, skipping email.');
+  }
+
   process.exit(0);
 }
 

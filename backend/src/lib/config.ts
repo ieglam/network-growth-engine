@@ -44,6 +44,10 @@ const configSchema = z.object({
 
   // Queue Settings
   queueGenerationHour: z.coerce.number().min(0).max(23).default(7),
+
+  // SMTP (email notifications)
+  smtpEmail: z.string().optional(),
+  smtpPassword: z.string().optional(),
 });
 
 const parsed = configSchema.safeParse({
@@ -64,6 +68,8 @@ const parsed = configSchema.safeParse({
   calendarIntegration: process.env.CALENDAR_INTEGRATION,
   linkedinHeadless: process.env.LINKEDIN_HEADLESS,
   queueGenerationHour: process.env.QUEUE_GENERATION_HOUR,
+  smtpEmail: process.env.SMTP_EMAIL,
+  smtpPassword: process.env.SMTP_PASSWORD,
 });
 
 if (!parsed.success) {

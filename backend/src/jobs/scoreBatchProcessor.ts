@@ -48,7 +48,7 @@ export function createScoreBatchWorker(redisUrl: string) {
 export async function scheduleScoreBatch(queue: Queue) {
   await queue.upsertJobScheduler(
     'nightly-score-batch',
-    { pattern: '0 2 * * *' },
+    { pattern: '0 2 * * *', tz: 'America/Mexico_City' },
     { name: 'score-batch' }
   );
 

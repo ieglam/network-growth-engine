@@ -1,6 +1,41 @@
-// Bull worker entry point — job processors will be registered here
-// See TASK-012 (daily queue), TASK-032 (scoring batch), TASK-059 (hard delete cleanup)
-
 import 'dotenv/config';
+import { config } from '../lib/config.js';
+import {
+  createDailyQueueQueue,
+  createDailyQueueWorker,
+  scheduleDailyQueue,
+} from '../jobs/dailyQueueGeneration.js';
+import {
+  createScoreBatchQueue,
+  createScoreBatchWorker,
+  scheduleScoreBatch,
+} from '../jobs/scoreBatchProcessor.js';
 
-console.log('Workers starting... (no jobs registered yet)');
+async function startWorkers() {
+  const redisUrl = config.redisUrl;
+
+  // Daily queue generation (7 AM Moscow)
+  const dailyQueueQueue = createDailyQueueQueue(redisUrl);
+  createDailyQueueWorker(redisUrl);
+  await scheduleDailyQueue(dailyQueueQueue, config.queueGenerationHour);
+
+  // Nightly score batch (2 AM Moscow)
+  const scoreBatchQueue = createScoreBatchQueue(redisUrl);
+  createScoreBatchWorker(redisUrl);
+  await scheduleScoreBatch(scoreBatchQueue);
+
+  console.log(`
+╔═══════════════════════════════════════════════════════════╗
+║     Network Growth Engine - Workers                       ║
+╠═══════════════════════════════════════════════════════════╣
+║  Redis: ${redisUrl.padEnd(48)}║
+║  Daily queue generation: ${config.queueGenerationHour}:00 AM America/Mexico_City     ║
+║  Score batch: 2:00 AM America/Mexico_City                       ║
+╚═══════════════════════════════════════════════════════════╝
+  `);
+}
+
+startWorkers().catch((err) => {
+  console.error('Failed to start workers:', err);
+  process.exit(1);
+});
