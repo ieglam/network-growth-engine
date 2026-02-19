@@ -8,7 +8,6 @@ beforeAll(async () => {
   await prisma.template.create({
     data: {
       name: 'QTest Default',
-      persona: 'general',
       body: 'Hi {{first_name}}, I noticed your work at {{company}}. Would love to connect!',
       isActive: true,
     },
@@ -95,7 +94,6 @@ describe('generateDailyQueue', () => {
     await prisma.template.create({
       data: {
         name: 'QTest Long Template',
-        persona: 'general',
         body,
         isActive: true,
       },
@@ -159,9 +157,9 @@ describe('generateDailyQueue', () => {
     expect(result.connectionRequests).toBe(0);
   });
 
-  it('carries over incomplete items from previous day', async () => {
+  it('does not touch pending items from previous day', async () => {
     const contact = await prisma.contact.create({
-      data: { firstName: 'Eve', lastName: 'Green', status: 'target' },
+      data: { firstName: 'Eve', lastName: 'Green', status: 'target', priorityScore: 7.0 },
     });
 
     const yesterday = new Date();
@@ -176,15 +174,17 @@ describe('generateDailyQueue', () => {
       },
     });
 
-    const result = await generateDailyQueue();
+    const result = await generateDailyQueue({ maxNewRequests: 5 });
 
-    expect(result.carriedOver).toBe(1);
+    // The contact already has a pending queue item, so should not be re-queued
+    expect(result.connectionRequests).toBe(0);
 
-    const item = await prisma.queueItem.findFirst({
+    const items = await prisma.queueItem.findMany({
       where: { contactId: contact.id },
     });
-    // Queue date should be updated to today
-    expect(item!.queueDate.toISOString().slice(0, 10)).toBe(new Date().toISOString().slice(0, 10));
+    // Only the original item from yesterday should exist
+    expect(items).toHaveLength(1);
+    expect(items[0].queueDate.toISOString().slice(0, 10)).toBe(yesterday.toISOString().slice(0, 10));
   });
 
   it('does not queue the same contact twice', async () => {
@@ -232,13 +232,12 @@ describe('generateDailyQueue', () => {
       },
     });
 
-    const result = await generateDailyQueue();
-
-    expect(result.followUps).toBe(1);
+    await generateDailyQueue();
 
     const item = await prisma.queueItem.findFirst({
       where: { contactId: contact.id },
     });
+    expect(item).not.toBeNull();
     expect(item!.actionType).toBe('follow_up');
   });
 

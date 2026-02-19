@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useSettings, useUpdateSettings } from '@/hooks/useSettings';
 
 interface SettingsForm {
-  queue_generation_hour: string;
+  queue_generation_time: string;
   linkedin_weekly_limit: string;
   linkedin_daily_limit: string;
   cooldown_days: string;
@@ -15,7 +15,7 @@ interface SettingsForm {
 }
 
 const DEFAULTS: SettingsForm = {
-  queue_generation_hour: '7',
+  queue_generation_time: '07:00',
   linkedin_weekly_limit: '100',
   linkedin_daily_limit: '20',
   cooldown_days: '7',
@@ -73,19 +73,17 @@ export default function SettingsPage() {
           </h2>
           <div>
             <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
-              Generation Time (hour, 0-23)
+              Generation Time
             </label>
             <div className="flex items-center gap-3">
               <input
-                type="number"
-                min={0}
-                max={23}
-                value={form.queue_generation_hour}
-                onChange={(e) => setField('queue_generation_hour', e.target.value)}
-                className="w-24 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                type="time"
+                value={form.queue_generation_time}
+                onChange={(e) => setField('queue_generation_time', e.target.value)}
+                className="w-36 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
               <span className="text-sm text-gray-500 dark:text-gray-400">
-                {formatHour(parseInt(form.queue_generation_hour))}
+                Mexico City time
               </span>
             </div>
           </div>
@@ -264,11 +262,4 @@ export default function SettingsPage() {
       </form>
     </div>
   );
-}
-
-function formatHour(hour: number): string {
-  if (isNaN(hour) || hour < 0 || hour > 23) return '';
-  const period = hour >= 12 ? 'PM' : 'AM';
-  const h = hour % 12 || 12;
-  return `${h}:00 ${period}`;
 }

@@ -19,9 +19,11 @@
     "db:generate": "prisma generate",
     "db:backup": "tsx scripts/db-backup.ts",
     "workers": "tsx src/workers/index.ts",
-    "seed:linkedin": "tsx src/cli/seed-linkedin.ts"
+    "seed:linkedin": "tsx src/cli/seed-linkedin.ts",
+    "send:connections": "tsx src/cli/send-connections.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.77.0",
     "@fastify/cors": "^9.0.1",
     "@fastify/helmet": "^11.1.1",
     "@fastify/multipart": "^8.1.0",

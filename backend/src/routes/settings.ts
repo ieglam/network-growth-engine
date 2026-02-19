@@ -1,9 +1,11 @@
 import { FastifyInstance, FastifyPluginOptions } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
+import { Queue } from 'bullmq';
+import { config } from '../lib/config.js';
 
 const settingValidators: Record<string, z.ZodType> = {
-  queue_generation_hour: z.coerce.number().int().min(0).max(23),
+  queue_generation_time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Must be HH:MM format (00:00–23:59)'),
   linkedin_weekly_limit: z.coerce.number().int().min(1).max(500),
   linkedin_daily_limit: z.coerce.number().int().min(1).max(100),
   cooldown_days: z.coerce.number().int().min(1).max(30),
@@ -68,6 +70,21 @@ export async function settingsRoutes(fastify: FastifyInstance, _options: Fastify
         create: { key, value },
       });
       updated[key] = value;
+
+      // Dynamically update BullMQ cron schedule when queue time changes
+      if (key === 'queue_generation_time') {
+        const [hour, minute] = value.split(':').map(Number);
+        const queue = new Queue('daily-queue-generation', {
+          connection: { url: config.redisUrl },
+        });
+        await queue.upsertJobScheduler(
+          'daily-queue',
+          { pattern: `${minute} ${hour} * * *`, tz: 'America/Mexico_City' },
+          { name: 'generate-queue' }
+        );
+        await queue.close();
+        fastify.log.info(`Queue generation rescheduled to ${value} America/Mexico_City`);
+      }
     }
 
     if (Object.keys(errors).length > 0 && Object.keys(updated).length === 0) {

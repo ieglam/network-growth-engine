@@ -11,9 +11,7 @@ async function main() {
 
   console.log(`Done in ${elapsed}s`);
   console.log(`  Connection requests: ${result.connectionRequests}`);
-  console.log(`  Follow-ups:         ${result.followUps}`);
   console.log(`  Re-engagements:     ${result.reEngagements}`);
-  console.log(`  Carried over:       ${result.carriedOver}`);
   console.log(`  Flagged for editing: ${result.flaggedForEditing}`);
   console.log(`  Total:              ${result.total}`);
 
@@ -22,7 +20,7 @@ async function main() {
     const queueDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
 
     const queueItems = await prisma.queueItem.findMany({
-      where: { queueDate },
+      where: { queueDate, status: 'pending' },
       include: {
         contact: { select: { firstName: true, lastName: true, company: true, linkedinUrl: true } },
       },

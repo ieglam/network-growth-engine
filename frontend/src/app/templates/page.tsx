@@ -8,6 +8,7 @@ import {
   useUpdateTemplate,
   useDeleteTemplate,
 } from '@/hooks/useTemplates';
+import { useCategoriesWithCounts } from '@/hooks/useCategoryManagement';
 
 const MAX_CHARS = 300;
 const WARN_CHARS = 280;
@@ -34,15 +35,6 @@ const SAMPLE_DATA: Record<string, string> = {
   custom: '',
 };
 
-const PERSONA_OPTIONS = [
-  'Professional Networker',
-  'Industry Peer',
-  'Recruiter',
-  'Thought Leader',
-  'Community Builder',
-  'Other',
-];
-
 function renderPreview(body: string, data: Record<string, string>): string {
   return body.replace(/\{\{(\w+)\}\}/g, (_match, token: string) => {
     return data[token] ?? '';
@@ -51,7 +43,7 @@ function renderPreview(body: string, data: Record<string, string>): string {
 
 interface TemplateFormData {
   name: string;
-  persona: string;
+  categoryId: string;
   subject: string;
   body: string;
   isActive: boolean;
@@ -59,7 +51,7 @@ interface TemplateFormData {
 
 const emptyForm: TemplateFormData = {
   name: '',
-  persona: '',
+  categoryId: '',
   subject: '',
   body: '',
   isActive: true,
@@ -67,6 +59,7 @@ const emptyForm: TemplateFormData = {
 
 export default function TemplatesPage() {
   const { data: templatesData, isLoading } = useTemplates();
+  const { data: categoriesData } = useCategoriesWithCounts();
   const createTemplate = useCreateTemplate();
   const updateTemplate = useUpdateTemplate();
   const deleteTemplate = useDeleteTemplate();
@@ -74,20 +67,22 @@ export default function TemplatesPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<TemplateFormData>(emptyForm);
-  const [personaFilter, setPersonaFilter] = useState<string>('');
+  const [categoryFilter, setCategoryFilter] = useState<string>('');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   const templates = useMemo(() => templatesData?.data ?? [], [templatesData?.data]);
+  const categories = useMemo(() => categoriesData?.data ?? [], [categoriesData?.data]);
 
-  const personas = useMemo(() => {
-    const set = new Set(templates.map((t) => t.persona));
-    return Array.from(set).sort();
+  const usedCategoryIds = useMemo(() => {
+    const set = new Set(templates.map((t) => t.categoryId).filter(Boolean) as string[]);
+    return Array.from(set);
   }, [templates]);
 
   const filteredTemplates = useMemo(() => {
-    if (!personaFilter) return templates;
-    return templates.filter((t) => t.persona === personaFilter);
-  }, [templates, personaFilter]);
+    if (!categoryFilter) return templates;
+    if (categoryFilter === '__none__') return templates.filter((t) => !t.categoryId);
+    return templates.filter((t) => t.categoryId === categoryFilter);
+  }, [templates, categoryFilter]);
 
   const preview = useMemo(() => renderPreview(form.body, SAMPLE_DATA), [form.body]);
   const charCount = form.body.length;
@@ -117,7 +112,7 @@ export default function TemplatesPage() {
     setEditingId(t.id);
     setForm({
       name: t.name,
-      persona: t.persona,
+      categoryId: t.categoryId ?? '',
       subject: t.subject ?? '',
       body: t.body,
       isActive: t.isActive,
@@ -158,7 +153,7 @@ export default function TemplatesPage() {
 
       const payload = {
         name: form.name,
-        persona: form.persona,
+        categoryId: form.categoryId || null,
         body: form.body,
         isActive: form.isActive,
         ...(form.subject ? { subject: form.subject } : {}),
@@ -212,33 +207,46 @@ export default function TemplatesPage() {
         </button>
       </div>
 
-      {/* Persona filter */}
-      {personas.length > 0 && (
-        <div className="flex items-center gap-2 mb-4">
-          <span className="text-sm text-gray-500 dark:text-gray-400">Filter by persona:</span>
+      {/* Category filter */}
+      {usedCategoryIds.length > 0 && (
+        <div className="flex items-center gap-2 mb-4 flex-wrap">
+          <span className="text-sm text-gray-500 dark:text-gray-400">Filter by category:</span>
           <button
-            onClick={() => setPersonaFilter('')}
+            onClick={() => setCategoryFilter('')}
             className={`px-3 py-1 text-sm rounded-full ${
-              !personaFilter
+              !categoryFilter
                 ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
                 : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
             }`}
           >
             All
           </button>
-          {personas.map((p) => (
-            <button
-              key={p}
-              onClick={() => setPersonaFilter(p)}
-              className={`px-3 py-1 text-sm rounded-full ${
-                personaFilter === p
-                  ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
-                  : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-              }`}
-            >
-              {p}
-            </button>
-          ))}
+          {usedCategoryIds.map((catId) => {
+            const cat = categories.find((c) => c.id === catId);
+            return (
+              <button
+                key={catId}
+                onClick={() => setCategoryFilter(catId)}
+                className={`px-3 py-1 text-sm rounded-full ${
+                  categoryFilter === catId
+                    ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
+                    : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                }`}
+              >
+                {cat?.name ?? 'Unknown'}
+              </button>
+            );
+          })}
+          <button
+            onClick={() => setCategoryFilter('__none__')}
+            className={`px-3 py-1 text-sm rounded-full ${
+              categoryFilter === '__none__'
+                ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
+                : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+            }`}
+          >
+            Generic
+          </button>
         </div>
       )}
 
@@ -283,40 +291,24 @@ export default function TemplatesPage() {
                   />
                 </div>
 
-                {/* Persona */}
+                {/* Category */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Persona *
+                    Category{' '}
+                    <span className="text-gray-400 dark:text-gray-500 font-normal">(optional)</span>
                   </label>
                   <select
-                    value={PERSONA_OPTIONS.includes(form.persona) ? form.persona : 'Other'}
-                    onChange={(e) => {
-                      if (e.target.value === 'Other') {
-                        setForm((f) => ({ ...f, persona: '' }));
-                      } else {
-                        setForm((f) => ({ ...f, persona: e.target.value }));
-                      }
-                    }}
+                    value={form.categoryId}
+                    onChange={(e) => setForm((f) => ({ ...f, categoryId: e.target.value }))}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   >
-                    <option value="">Select persona...</option>
-                    {PERSONA_OPTIONS.map((p) => (
-                      <option key={p} value={p}>
-                        {p}
+                    <option value="">Generic (no category)</option>
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
                       </option>
                     ))}
                   </select>
-                  {(!PERSONA_OPTIONS.includes(form.persona) || form.persona === 'Other') && (
-                    <input
-                      type="text"
-                      value={form.persona === 'Other' ? '' : form.persona}
-                      onChange={(e) => setForm((f) => ({ ...f, persona: e.target.value }))}
-                      required
-                      maxLength={100}
-                      className="mt-2 w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="Enter custom persona name"
-                    />
-                  )}
                 </div>
 
                 {/* Subject (optional) */}
@@ -445,7 +437,6 @@ export default function TemplatesPage() {
                       createTemplate.isPending ||
                       updateTemplate.isPending ||
                       !form.name ||
-                      !form.persona ||
                       !form.body
                     }
                     className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -565,7 +556,7 @@ function TemplateCard({
             </div>
             <div className="flex items-center gap-3 mt-1">
               <span className="text-xs text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/20 px-2 py-0.5 rounded-full">
-                {t.persona}
+                {t.category?.name ?? 'Generic'}
               </span>
               <span className="text-xs text-gray-500 dark:text-gray-400">
                 Used {t.timesUsed} time{t.timesUsed !== 1 ? 's' : ''}

@@ -154,7 +154,7 @@ export default function QueuePage() {
 
   const getNoteText = (item: QueueItem): string => {
     if (editedNotes[item.id] !== undefined) return editedNotes[item.id];
-    return item.renderedNote || item.connectionNote || '';
+    return item.personalizedMessage || '';
   };
 
   const copyToClipboard = async (text: string, itemId: string) => {

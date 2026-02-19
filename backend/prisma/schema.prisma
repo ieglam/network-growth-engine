@@ -158,7 +158,8 @@ model Category {
   relevanceWeight Int      @map("relevance_weight")
   createdAt       DateTime @default(now()) @map("created_at")
 
-  contacts ContactCategory[]
+  contacts  ContactCategory[]
+  templates Template[]
 
   @@map("categories")
 }
@@ -212,18 +213,19 @@ model Interaction {
 }
 
 model Template {
-  id          String   @id @default(uuid())
-  name        String   @db.VarChar(100)
-  persona     String   @db.VarChar(100)
-  subject     String?  @db.VarChar(200)
-  body        String   @db.VarChar(300)
-  isActive    Boolean  @default(true) @map("is_active")
-  timesUsed   Int      @default(0) @map("times_used")
-  acceptances Int      @default(0)
-  responses   Int      @default(0)
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id          String    @id @default(uuid())
+  name        String    @db.VarChar(100)
+  categoryId  String?   @map("category_id")
+  subject     String?   @db.VarChar(200)
+  body        String    @db.VarChar(300)
+  isActive    Boolean   @default(true) @map("is_active")
+  timesUsed   Int       @default(0) @map("times_used")
+  acceptances Int       @default(0)
+  responses   Int       @default(0)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
 
+  category   Category?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   queueItems QueueItem[]
 
   @@map("templates")

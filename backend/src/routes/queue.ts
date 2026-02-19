@@ -30,7 +30,7 @@ export async function queueRoutes(fastify: FastifyInstance, _options: FastifyPlu
           },
         },
         template: {
-          select: { id: true, name: true, persona: true },
+          select: { id: true, name: true, categoryId: true, category: { select: { id: true, name: true } } },
         },
       },
       orderBy: [{ actionType: 'asc' }, { createdAt: 'asc' }],

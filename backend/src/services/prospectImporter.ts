@@ -1,5 +1,6 @@
 import { prisma } from '../lib/prisma.js';
 import type { ScrapedProspect } from './linkedinSearchScraper.js';
+import { categorizeNewlyImported } from './aiCategorizationService.js';
 
 export interface ImportResult {
   imported: number;
@@ -136,6 +137,16 @@ export async function importProspects(prospects: ScrapedProspect[]): Promise<Imp
       result.errors++;
       const message = error instanceof Error ? error.message : 'Unknown error';
       result.details.errorMessages.push(`Failed to import ${prospect.fullName}: ${message}`);
+    }
+  }
+
+  // AI categorization of newly imported contacts
+  if (result.details.importedContacts.length > 0) {
+    try {
+      const ids = result.details.importedContacts.map((c) => c.id);
+      await categorizeNewlyImported(ids);
+    } catch (err) {
+      console.error('AI categorization failed during prospect import:', err);
     }
   }
 

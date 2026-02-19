@@ -4,9 +4,7 @@ const TEMPLATE_MAX_LENGTH = 300;
 
 export interface QueueGenerationResult {
   connectionRequests: number;
-  followUps: number;
   reEngagements: number;
-  carriedOver: number;
   total: number;
   flaggedForEditing: number;
 }
@@ -19,33 +17,27 @@ function renderTemplate(body: string, data: Record<string, string>): string {
 
 /**
  * Find the best matching template for a contact based on their categories.
- * Falls back to any active template if no persona match.
+ * Uses exact categoryId FK match. Falls back to least-used active template.
  */
 async function findTemplateForContact(
   contactId: string
 ): Promise<{ id: string; body: string } | null> {
   const contact = await prisma.contact.findFirst({
     where: { id: contactId, deletedAt: null },
-    include: { categories: { include: { category: true } } },
+    include: { categories: { select: { categoryId: true } } },
   });
 
   if (!contact) return null;
 
-  // Try to match template persona to category name (lowercased, partial match)
-  const categoryNames = contact.categories.map((cc) => cc.category.name.toLowerCase());
+  const categoryIds = contact.categories.map((cc) => cc.categoryId);
 
-  if (categoryNames.length > 0) {
-    const templates = await prisma.template.findMany({
-      where: { isActive: true },
+  if (categoryIds.length > 0) {
+    const matched = await prisma.template.findFirst({
+      where: { isActive: true, categoryId: { in: categoryIds } },
       orderBy: { timesUsed: 'asc' },
     });
 
-    for (const tmpl of templates) {
-      const persona = tmpl.persona.toLowerCase();
-      if (categoryNames.some((cat) => cat.includes(persona) || persona.includes(cat))) {
-        return { id: tmpl.id, body: tmpl.body };
-      }
-    }
+    if (matched) return { id: matched.id, body: matched.body };
   }
 
   // Fallback: least-used active template
@@ -59,6 +51,7 @@ async function findTemplateForContact(
 
 /**
  * Generate the daily queue.
+ * Clears all pending/approved items for today first, then generates fresh.
  */
 export async function generateDailyQueue(options?: {
   maxNewRequests?: number;
@@ -72,14 +65,20 @@ export async function generateDailyQueue(options?: {
 
   const result: QueueGenerationResult = {
     connectionRequests: 0,
-    followUps: 0,
     reEngagements: 0,
-    carriedOver: 0,
     total: 0,
     flaggedForEditing: 0,
   };
 
-  // 1. Check weekly rate limit
+  // 1. Clear existing pending/approved items for today
+  await prisma.queueItem.deleteMany({
+    where: {
+      queueDate,
+      status: { in: ['pending', 'approved'] },
+    },
+  });
+
+  // 2. Check weekly rate limit
   const weekStart = getWeekStart(queueDate);
   const sentThisWeek = await prisma.queueItem.count({
     where: {
@@ -89,53 +88,20 @@ export async function generateDailyQueue(options?: {
     },
   });
 
-  const pendingThisWeek = await prisma.queueItem.count({
-    where: {
-      actionType: 'connection_request',
-      status: { in: ['pending', 'approved'] },
-      queueDate: { gte: weekStart },
-    },
-  });
-
-  const remainingCapacity = weeklyLimit - sentThisWeek - pendingThisWeek;
+  const remainingCapacity = weeklyLimit - sentThisWeek;
   if (remainingCapacity <= 0) {
     return result;
   }
 
-  // 2. Carry over yesterday's incomplete items
-  const yesterday = new Date(queueDate);
-  yesterday.setDate(yesterday.getDate() - 1);
-
-  const incompleteItems = await prisma.queueItem.findMany({
-    where: {
-      queueDate: { lt: queueDate },
-      status: 'pending',
-    },
-  });
-
-  for (const item of incompleteItems) {
-    await prisma.queueItem.update({
-      where: { id: item.id },
-      data: { queueDate },
-    });
-    result.carriedOver++;
-  }
-
   // 3. Select top targets by priority_score
-  const existingToday = await prisma.queueItem.findMany({
-    where: { queueDate },
-    select: { contactId: true },
-  });
-  const alreadyQueued = new Set(existingToday.map((q) => q.contactId));
-
-  const requestSlots = Math.min(maxNewRequests, remainingCapacity) - result.carriedOver;
+  const alreadyQueued = new Set<string>();
+  const requestSlots = Math.min(maxNewRequests, remainingCapacity);
 
   if (requestSlots > 0) {
     const targets = await prisma.contact.findMany({
       where: {
         status: 'target',
         deletedAt: null,
-        id: { notIn: Array.from(alreadyQueued) },
       },
       orderBy: { priorityScore: 'desc' },
       take: requestSlots,
@@ -182,51 +148,7 @@ export async function generateDailyQueue(options?: {
     }
   }
 
-  // 4. Add follow-ups: connections from last 7 days without first message
-  const sevenDaysAgo = new Date(queueDate);
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-
-  const recentConnections = await prisma.contact.findMany({
-    where: {
-      status: 'connected',
-      deletedAt: null,
-      id: { notIn: Array.from(alreadyQueued) },
-      statusHistory: {
-        some: {
-          toStatus: 'connected',
-          createdAt: { gte: sevenDaysAgo },
-        },
-      },
-    },
-    take: 10,
-  });
-
-  // Filter out those who already have a follow-up interaction
-  for (const conn of recentConnections) {
-    const hasFollowUp = await prisma.interaction.findFirst({
-      where: {
-        contactId: conn.id,
-        type: 'linkedin_message',
-        occurredAt: { gte: sevenDaysAgo },
-      },
-    });
-
-    if (!hasFollowUp) {
-      await prisma.queueItem.create({
-        data: {
-          contactId: conn.id,
-          queueDate,
-          actionType: 'follow_up',
-          notes: 'New connection — send first message',
-        },
-      });
-
-      alreadyQueued.add(conn.id);
-      result.followUps++;
-    }
-  }
-
-  // 5. Add re-engagements: score dropped >15 in 30 days
+  // 4. Add re-engagements: score dropped >15 in 30 days
   const thirtyDaysAgo = new Date(queueDate);
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
@@ -264,8 +186,7 @@ export async function generateDailyQueue(options?: {
     }
   }
 
-  result.total =
-    result.connectionRequests + result.followUps + result.reEngagements + result.carriedOver;
+  result.total = result.connectionRequests + result.reEngagements;
 
   return result;
 }

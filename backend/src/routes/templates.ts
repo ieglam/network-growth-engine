@@ -6,7 +6,7 @@ const TEMPLATE_MAX_LENGTH = 300;
 
 const createTemplateSchema = z.object({
   name: z.string().min(1).max(100),
-  persona: z.string().min(1).max(100),
+  categoryId: z.string().uuid().nullish(),
   subject: z.string().max(200).nullish(),
   body: z.string().min(1).max(TEMPLATE_MAX_LENGTH),
   isActive: z.boolean().optional(),
@@ -14,7 +14,7 @@ const createTemplateSchema = z.object({
 
 const updateTemplateSchema = z.object({
   name: z.string().min(1).max(100).optional(),
-  persona: z.string().min(1).max(100).optional(),
+  categoryId: z.string().uuid().nullish(),
   subject: z.string().max(200).nullish(),
   body: z.string().min(1).max(TEMPLATE_MAX_LENGTH).optional(),
   isActive: z.boolean().optional(),
@@ -27,19 +27,20 @@ const uuidParamSchema = z.object({
 export async function templateRoutes(fastify: FastifyInstance, _options: FastifyPluginOptions) {
   // GET /api/templates — List all templates
   fastify.get('/templates', async (request) => {
-    const { persona, active } = request.query as {
-      persona?: string;
+    const { categoryId, active } = request.query as {
+      categoryId?: string;
       active?: string;
     };
 
     const where: Record<string, unknown> = {};
-    if (persona) where.persona = persona;
+    if (categoryId) where.categoryId = categoryId;
     if (active === 'true') where.isActive = true;
     if (active === 'false') where.isActive = false;
 
     const templates = await prisma.template.findMany({
       where,
-      orderBy: [{ persona: 'asc' }, { name: 'asc' }],
+      include: { category: { select: { id: true, name: true } } },
+      orderBy: [{ name: 'asc' }],
     });
 
     return { success: true, data: templates };
@@ -62,6 +63,7 @@ export async function templateRoutes(fastify: FastifyInstance, _options: Fastify
 
     const template = await prisma.template.create({
       data: parseResult.data,
+      include: { category: { select: { id: true, name: true } } },
     });
 
     return reply.status(201).send({ success: true, data: template });
@@ -110,6 +112,7 @@ export async function templateRoutes(fastify: FastifyInstance, _options: Fastify
     const template = await prisma.template.update({
       where: { id: paramResult.data.id },
       data: bodyResult.data,
+      include: { category: { select: { id: true, name: true } } },
     });
 
     return { success: true, data: template };

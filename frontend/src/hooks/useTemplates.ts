@@ -4,7 +4,7 @@ import type { Template, TemplatePreviewResult } from '@/lib/types';
 
 export interface TemplateCreateInput {
   name: string;
-  persona: string;
+  categoryId?: string | null;
   subject?: string;
   body: string;
   isActive?: boolean;
@@ -12,15 +12,15 @@ export interface TemplateCreateInput {
 
 export interface TemplateUpdateInput {
   name?: string;
-  persona?: string;
+  categoryId?: string | null;
   subject?: string | null;
   body?: string;
   isActive?: boolean;
 }
 
-export function useTemplates(filters?: { persona?: string; active?: boolean }) {
+export function useTemplates(filters?: { categoryId?: string; active?: boolean }) {
   const params = new URLSearchParams();
-  if (filters?.persona) params.set('persona', filters.persona);
+  if (filters?.categoryId) params.set('categoryId', filters.categoryId);
   if (filters?.active !== undefined) params.set('active', String(filters.active));
   const qs = params.toString();
 

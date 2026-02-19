@@ -5,6 +5,7 @@ import * as XLSX from 'xlsx';
 import { prisma } from '../lib/prisma.js';
 import { calculateContactScore, loadScoringConfig } from '../services/scoringService.js';
 import { checkStatusTransition, checkDemotion } from '../services/statusTransitionService.js';
+import { categorizeNewlyImported } from '../services/aiCategorizationService.js';
 
 interface LinkedInRow {
   'First Name'?: string;
@@ -169,6 +170,7 @@ export async function importRoutes(fastify: FastifyInstance, _options: FastifyPl
       reason: string;
     }[] = [];
     const errors: { row: number; message: string }[] = [];
+    const importedContactIds: string[] = [];
 
     // Track URLs seen in this import batch to handle intra-file duplicates
     const seenUrlsInBatch = new Set<string>();
@@ -249,6 +251,7 @@ export async function importRoutes(fastify: FastifyInstance, _options: FastifyPl
         const nameKey = `${firstName.toLowerCase()}|${lastName.toLowerCase()}|${(company || '').toLowerCase()}`;
         existingByNameCompany.add(nameKey);
 
+        importedContactIds.push(contact.id);
         imported++;
       } catch (err: unknown) {
         if (err instanceof Error && err.message.includes('Unique constraint failed')) {
@@ -262,6 +265,14 @@ export async function importRoutes(fastify: FastifyInstance, _options: FastifyPl
       }
     }
 
+    // AI categorization of newly imported contacts
+    let aiCategorization = null;
+    try {
+      aiCategorization = await categorizeNewlyImported(importedContactIds);
+    } catch (err) {
+      console.error('AI categorization failed during LinkedIn CSV import:', err);
+    }
+
     return reply.status(200).send({
       success: true,
       data: {
@@ -270,6 +281,7 @@ export async function importRoutes(fastify: FastifyInstance, _options: FastifyPl
         flaggedForReview,
         errors,
         totalRows: rows.length,
+        aiCategorization,
       },
     });
   });
@@ -431,6 +443,7 @@ export async function importRoutes(fastify: FastifyInstance, _options: FastifyPl
     }[] = [];
     const errors: { row: number; message: string }[] = [];
     const seenUrlsInBatch = new Set<string>();
+    const importedContactIds: string[] = [];
 
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
@@ -530,6 +543,7 @@ export async function importRoutes(fastify: FastifyInstance, _options: FastifyPl
           `${firstName.toLowerCase()}|${lastName.toLowerCase()}|${(company || '').toLowerCase()}`
         );
 
+        importedContactIds.push(contact.id);
         imported++;
       } catch (err: unknown) {
         if (err instanceof Error && err.message.includes('Unique constraint failed')) {
@@ -543,6 +557,14 @@ export async function importRoutes(fastify: FastifyInstance, _options: FastifyPl
       }
     }
 
+    // AI categorization of newly imported contacts
+    let aiCategorization = null;
+    try {
+      aiCategorization = await categorizeNewlyImported(importedContactIds);
+    } catch (err) {
+      console.error('AI categorization failed during CSV import:', err);
+    }
+
     return reply.status(200).send({
       success: true,
       data: {
@@ -551,6 +573,7 @@ export async function importRoutes(fastify: FastifyInstance, _options: FastifyPl
         flaggedForReview,
         errors,
         totalRows: rows.length,
+        aiCategorization,
       },
     });
   });
@@ -672,6 +695,7 @@ export async function importRoutes(fastify: FastifyInstance, _options: FastifyPl
       reason: string;
     }[] = [];
     const errors: { row: number; message: string }[] = [];
+    const importedContactIds: string[] = [];
 
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
@@ -825,6 +849,7 @@ export async function importRoutes(fastify: FastifyInstance, _options: FastifyPl
           );
         }
 
+        importedContactIds.push(contact.id);
         imported++;
       } catch (err: unknown) {
         if (err instanceof Error && err.message.includes('Unique constraint failed')) {
@@ -838,6 +863,14 @@ export async function importRoutes(fastify: FastifyInstance, _options: FastifyPl
       }
     }
 
+    // AI categorization of newly imported contacts
+    let aiCategorization = null;
+    try {
+      aiCategorization = await categorizeNewlyImported(importedContactIds);
+    } catch (err) {
+      console.error('AI categorization failed during Apollo import:', err);
+    }
+
     return reply.status(200).send({
       success: true,
       data: {
@@ -846,6 +879,7 @@ export async function importRoutes(fastify: FastifyInstance, _options: FastifyPl
         flaggedForReview,
         errors,
         totalRows: rows.length,
+        aiCategorization,
       },
     });
   });

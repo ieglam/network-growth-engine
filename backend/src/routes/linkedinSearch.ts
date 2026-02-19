@@ -266,16 +266,8 @@ export async function linkedinSearchRoutes(
     // Recalculate priority scores so category weights are reflected
     const scoring = await processAllPriorityScores();
 
-    // Clear today's pending/approved items so regeneration starts fresh
     const today = new Date();
     const queueDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    await prisma.queueItem.deleteMany({
-      where: {
-        queueDate,
-        status: { in: ['pending', 'approved'] },
-      },
-    });
-
     const result = await generateDailyQueue({ queueDate });
     return {
       success: true,

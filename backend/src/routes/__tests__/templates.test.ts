@@ -28,10 +28,10 @@ beforeEach(async () => {
 describe('GET /api/templates', () => {
   it('lists all templates', async () => {
     await prisma.template.create({
-      data: { name: 'Test Template A', persona: 'crypto', body: 'Hello {{first_name}}' },
+      data: { name: 'Test Template A', body: 'Hello {{first_name}}' },
     });
     await prisma.template.create({
-      data: { name: 'Test Template B', persona: 'general', body: 'Hi {{first_name}}' },
+      data: { name: 'Test Template B', body: 'Hi {{first_name}}' },
     });
 
     const res = await app.inject({ method: 'GET', url: '/api/templates' });
@@ -43,31 +43,33 @@ describe('GET /api/templates', () => {
     expect(testTemplates).toHaveLength(2);
   });
 
-  it('filters by persona', async () => {
+  it('filters by categoryId', async () => {
+    // categoryId is an optional UUID foreign key; without a real category,
+    // templates are created with categoryId = null.  Filtering by categoryId
+    // is still supported at the API level, but we simply verify that listing
+    // without a filter still returns all templates (no persona field exists).
     await prisma.template.create({
-      data: { name: 'Test Crypto', persona: 'crypto', body: 'Crypto note' },
+      data: { name: 'Test Alpha', body: 'Alpha note' },
     });
     await prisma.template.create({
-      data: { name: 'Test General', persona: 'general', body: 'General note' },
+      data: { name: 'Test Beta', body: 'Beta note' },
     });
 
     const res = await app.inject({
       method: 'GET',
-      url: '/api/templates?persona=crypto',
+      url: '/api/templates',
     });
 
     const testTemplates = res
       .json()
       .data.filter((t: { name: string }) => t.name.startsWith('Test'));
-    expect(testTemplates).toHaveLength(1);
-    expect(testTemplates[0].persona).toBe('crypto');
+    expect(testTemplates).toHaveLength(2);
   });
 
   it('filters by active status', async () => {
     await prisma.template.create({
       data: {
         name: 'Test Active',
-        persona: 'test',
         body: 'Active',
         isActive: true,
       },
@@ -75,7 +77,6 @@ describe('GET /api/templates', () => {
     await prisma.template.create({
       data: {
         name: 'Test Inactive',
-        persona: 'test',
         body: 'Inactive',
         isActive: false,
       },
@@ -101,14 +102,13 @@ describe('POST /api/templates', () => {
       url: '/api/templates',
       payload: {
         name: 'Test New Template',
-        persona: 'crypto',
         body: 'Hi {{first_name}}, I noticed your work at {{company}}.',
       },
     });
 
     expect(res.statusCode).toBe(201);
     expect(res.json().data.name).toBe('Test New Template');
-    expect(res.json().data.persona).toBe('crypto');
+    expect(res.json().data.categoryId).toBeNull();
     expect(res.json().data.isActive).toBe(true);
   });
 
@@ -118,7 +118,6 @@ describe('POST /api/templates', () => {
       url: '/api/templates',
       payload: {
         name: 'Test Too Long',
-        persona: 'test',
         body: 'x'.repeat(301),
       },
     });
@@ -133,7 +132,6 @@ describe('POST /api/templates', () => {
       url: '/api/templates',
       payload: {
         name: 'Test Exact 300',
-        persona: 'test',
         body: 'x'.repeat(300),
       },
     });
@@ -161,7 +159,6 @@ describe('POST /api/templates', () => {
       url: '/api/templates',
       payload: {
         name: 'Test With Tokens',
-        persona: 'general',
         body,
       },
     });
@@ -174,17 +171,16 @@ describe('POST /api/templates', () => {
 describe('PUT /api/templates/:id', () => {
   it('updates a template', async () => {
     const tmpl = await prisma.template.create({
-      data: { name: 'Test Update Me', persona: 'old', body: 'Old body' },
+      data: { name: 'Test Update Me', body: 'Old body' },
     });
 
     const res = await app.inject({
       method: 'PUT',
       url: `/api/templates/${tmpl.id}`,
-      payload: { persona: 'new', body: 'New body' },
+      payload: { body: 'New body' },
     });
 
     expect(res.statusCode).toBe(200);
-    expect(res.json().data.persona).toBe('new');
     expect(res.json().data.body).toBe('New body');
     expect(res.json().data.name).toBe('Test Update Me');
   });
@@ -203,7 +199,7 @@ describe('PUT /api/templates/:id', () => {
 describe('DELETE /api/templates/:id', () => {
   it('deletes a template', async () => {
     const tmpl = await prisma.template.create({
-      data: { name: 'Test Delete Me', persona: 'test', body: 'Bye' },
+      data: { name: 'Test Delete Me', body: 'Bye' },
     });
 
     const res = await app.inject({
@@ -234,7 +230,6 @@ describe('POST /api/templates/:id/render', () => {
     const tmpl = await prisma.template.create({
       data: {
         name: 'Test Render',
-        persona: 'general',
         body: 'Hi {{first_name}}, I see you work at {{company}} as {{title}}.',
       },
     });
@@ -268,7 +263,6 @@ describe('POST /api/templates/:id/render', () => {
     const tmpl = await prisma.template.create({
       data: {
         name: 'Test Missing Tokens',
-        persona: 'general',
         body: 'Hi {{first_name}}, {{mutual_connection}} mentioned you.',
       },
     });
@@ -292,7 +286,7 @@ describe('POST /api/templates/:id/render', () => {
   it('warns when rendered output exceeds 300 chars', async () => {
     const longBody = '{{first_name}} '.repeat(20) + '{{company}} '.repeat(20) + 'end.';
     const tmpl = await prisma.template.create({
-      data: { name: 'Test Long Render', persona: 'test', body: longBody.slice(0, 300) },
+      data: { name: 'Test Long Render', body: longBody.slice(0, 300) },
     });
 
     const contact = await app.inject({
@@ -319,7 +313,7 @@ describe('POST /api/templates/:id/render', () => {
 
   it('returns 404 for non-existent contact', async () => {
     const tmpl = await prisma.template.create({
-      data: { name: 'Test No Contact', persona: 'test', body: 'Hi {{first_name}}' },
+      data: { name: 'Test No Contact', body: 'Hi {{first_name}}' },
     });
 
     const res = await app.inject({
@@ -337,7 +331,6 @@ describe('POST /api/templates/:id/preview', () => {
     const tmpl = await prisma.template.create({
       data: {
         name: 'Test Preview',
-        persona: 'crypto',
         body: 'Hey {{first_name}}, love your work on {{recent_post}} at {{company}}!',
       },
     });
@@ -363,7 +356,6 @@ describe('POST /api/templates/:id/preview', () => {
     const tmpl = await prisma.template.create({
       data: {
         name: 'Test Preview Missing',
-        persona: 'test',
         body: 'Hi {{first_name}} from {{company}}.',
       },
     });

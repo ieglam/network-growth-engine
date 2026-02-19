@@ -6,7 +6,7 @@ async function main() {
   const queueDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
 
   const queueItems = await prisma.queueItem.findMany({
-    where: { queueDate },
+    where: { queueDate, status: 'pending' },
     include: {
       contact: { select: { firstName: true, lastName: true, company: true, linkedinUrl: true } },
     },

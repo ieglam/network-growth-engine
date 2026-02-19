@@ -48,6 +48,9 @@ const configSchema = z.object({
   // SMTP (email notifications)
   smtpEmail: z.string().optional(),
   smtpPassword: z.string().optional(),
+
+  // AI (Anthropic)
+  anthropicApiKey: z.string().optional(),
 });
 
 const parsed = configSchema.safeParse({
@@ -70,6 +73,7 @@ const parsed = configSchema.safeParse({
   queueGenerationHour: process.env.QUEUE_GENERATION_HOUR,
   smtpEmail: process.env.SMTP_EMAIL,
   smtpPassword: process.env.SMTP_PASSWORD,
+  anthropicApiKey: process.env.ANTHROPIC_API_KEY,
 });
 
 if (!parsed.success) {

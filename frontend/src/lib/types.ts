@@ -117,7 +117,8 @@ export interface QueueItemContact {
 export interface QueueItemTemplate {
   id: string;
   name: string;
-  persona: string | null;
+  categoryId: string | null;
+  category: { id: string; name: string } | null;
 }
 
 export interface QueueItem {
@@ -126,8 +127,7 @@ export interface QueueItem {
   queueDate: string;
   actionType: QueueActionType;
   status: QueueItemStatus;
-  connectionNote: string | null;
-  renderedNote: string | null;
+  personalizedMessage: string | null;
   templateId: string | null;
   notes: string | null;
   executedAt: string | null;
@@ -152,7 +152,8 @@ export interface QueueSummary {
 export interface Template {
   id: string;
   name: string;
-  persona: string;
+  categoryId: string | null;
+  category: { id: string; name: string } | null;
   subject: string | null;
   body: string;
   isActive: boolean;

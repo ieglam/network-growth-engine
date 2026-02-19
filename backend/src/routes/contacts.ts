@@ -6,6 +6,8 @@ import {
   manualStatusTransition,
   handleConnectionAccepted,
 } from '../services/statusTransitionService.js';
+import { config } from '../lib/config.js';
+import { aiCategorizeContacts } from '../services/aiCategorizationService.js';
 
 const contactFields = [
   'firstName',
@@ -417,6 +419,42 @@ export async function contactRoutes(fastify: FastifyInstance, _options: FastifyP
       }
       throw err;
     }
+  });
+
+  // POST /api/contacts/ai-categorize — AI-powered categorization using Anthropic
+  fastify.post('/contacts/ai-categorize', async (request, reply) => {
+    if (!config.anthropicApiKey) {
+      return reply.status(503).send({
+        success: false,
+        error: {
+          code: 'AI_NOT_CONFIGURED',
+          message: 'ANTHROPIC_API_KEY is not set. Add it to .env to enable AI categorization.',
+        },
+      });
+    }
+
+    const parseResult = z
+      .object({
+        contactIds: z.array(z.string().uuid()).optional(),
+        force: z.boolean().optional(),
+        dryRun: z.boolean().optional(),
+      })
+      .safeParse(request.body);
+
+    if (!parseResult.success) {
+      return reply.status(400).send({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: parseResult.error.issues
+            .map((i) => `${i.path.join('.')}: ${i.message}`)
+            .join('; '),
+        },
+      });
+    }
+
+    const result = await aiCategorizeContacts(parseResult.data);
+    return { success: true, data: result };
   });
 
   // GET /api/contacts/:id — Get a contact
