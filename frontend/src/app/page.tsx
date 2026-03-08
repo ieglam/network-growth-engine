@@ -6,9 +6,14 @@ import {
   useDashboardGrowth,
   useDashboardActivity,
   useDashboardTrends,
+  useDashboardConversion,
 } from '@/hooks/useDashboard';
 import type {
   DailyConnectionPoint,
+  DailySentPoint,
+  WeeklyRatePoint,
+  CategoryConversion,
+  TemplateConversion,
   ActivityItem,
 } from '@/hooks/useDashboard';
 
@@ -43,10 +48,12 @@ export default function DashboardPage() {
   const { data: growthData, isLoading: growthLoading } = useDashboardGrowth();
   const { data: activityData } = useDashboardActivity();
   const { data: trendData } = useDashboardTrends();
+  const { data: conversionData } = useDashboardConversion();
 
   const growth = growthData?.data;
   const activity = activityData?.data;
   const trends = trendData?.data;
+  const conversion = conversionData?.data;
 
   const maxDailyVal = useMemo(() => {
     if (!trends?.dailyConnections?.length) return 1;
@@ -67,7 +74,7 @@ export default function DashboardPage() {
 
       {/* Row 1: Snapshot Cards */}
       {growth?.snapshot && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
           <SnapshotCard
             label="Queue Progress"
             value={`${growth.snapshot.queueCompleted ?? 0}/${growth.snapshot.queueTotal ?? 0}`}
@@ -81,15 +88,20 @@ export default function DashboardPage() {
             subtitle="weekly / monthly"
           />
           <SnapshotCard
-            label="Connections Sent"
-            value={String(growth.snapshot.connectionsSentToday ?? 0)}
-            subtitle="sent today"
+            label="Total Acceptances"
+            value={`${growth?.totalAccepted ?? 0}/${growth?.totalSent ?? 0}`}
+            subtitle={`${growth?.acceptanceRate ?? 0}% acceptance rate`}
+            trend={growth?.acceptanceTrend}
           />
           <SnapshotCard
-            label="Acceptance Rate"
-            value={`${growth?.acceptanceRate ?? 0}%`}
-            subtitle={`${growth?.totalAccepted ?? 0}/${growth?.totalSent ?? 0} all-time`}
-            trend={growth?.acceptanceTrend}
+            label="Pending Requests"
+            value={String(growth?.pendingRequests ?? 0)}
+            subtitle="awaiting response"
+          />
+          <SnapshotCard
+            label="Sent Today"
+            value={String(growth.snapshot.connectionsSentToday ?? 0)}
+            subtitle={`${growth?.rateLimit?.dailyUsed ?? 0}/${growth?.rateLimit?.dailyLimit ?? 20} daily limit`}
           />
         </div>
       )}
@@ -187,6 +199,74 @@ export default function DashboardPage() {
           </div>
         )}
       </div>
+
+      {/* Row 4: Connections Sent Per Day + Weekly Acceptance Rate */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Left: Connections Sent Per Day (30 days) */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
+          <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+            Connections Sent Per Day (30d)
+          </h2>
+          {!conversion?.dailySent?.length ? (
+            <p className="text-sm text-gray-400 dark:text-gray-500">No data yet</p>
+          ) : (
+            <DailySentChart data={conversion.dailySent} />
+          )}
+        </div>
+
+        {/* Right: Weekly Acceptance Rate (8 weeks) */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
+          <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+            Acceptance Rate Over Time (8w)
+          </h2>
+          {!conversion?.weeklyAcceptanceRate?.length ? (
+            <p className="text-sm text-gray-400 dark:text-gray-500">No data yet</p>
+          ) : (
+            <WeeklyRateChart data={conversion.weeklyAcceptanceRate} />
+          )}
+        </div>
+      </div>
+
+      {/* Row 5: Acceptance Rate by Category + by Template */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Left: By Category */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
+          <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+            Acceptance Rate by Category
+          </h2>
+          {!conversion?.byCategory?.length ? (
+            <p className="text-sm text-gray-400 dark:text-gray-500">No data yet</p>
+          ) : (
+            <ConversionTable
+              rows={conversion.byCategory.map((r: CategoryConversion) => ({
+                label: r.category,
+                sent: r.sent,
+                accepted: r.accepted,
+                rate: r.rate,
+              }))}
+            />
+          )}
+        </div>
+
+        {/* Right: By Template */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
+          <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+            Acceptance Rate by Template
+          </h2>
+          {!conversion?.byTemplate?.length ? (
+            <p className="text-sm text-gray-400 dark:text-gray-500">No data yet</p>
+          ) : (
+            <ConversionTable
+              rows={conversion.byTemplate.map((r: TemplateConversion) => ({
+                label: r.template,
+                sent: r.sent,
+                accepted: r.accepted,
+                rate: r.rate,
+              }))}
+            />
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -252,6 +332,126 @@ function RateLimitBar({ label, used, limit }: { label: string; used: number; lim
           style={{ width: `${Math.min(pct, 100)}%` }}
         />
       </div>
+    </div>
+  );
+}
+
+function DailySentChart({ data }: { data: DailySentPoint[] }) {
+  const max = Math.max(...data.map((d) => d.count), 1);
+
+  return (
+    <div className="flex items-end gap-px h-32">
+      {data.map((point, i) => {
+        const height = Math.max((point.count / max) * 100, 4);
+        const showLabel =
+          i === 0 || i === data.length - 1 || i % Math.max(Math.floor(data.length / 6), 1) === 0;
+        return (
+          <div key={i} className="flex-1 flex flex-col items-center gap-0.5 min-w-0">
+            <div
+              className="w-full bg-emerald-400 dark:bg-emerald-500 rounded-t hover:bg-emerald-500 dark:hover:bg-emerald-400 transition-colors cursor-default"
+              style={{ height: `${height}%` }}
+              title={`${formatDay(point.day)}: ${point.count} sent`}
+            />
+            {showLabel && (
+              <span className="text-[8px] text-gray-400 dark:text-gray-500 truncate w-full text-center">
+                {formatDay(point.day)}
+              </span>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function WeeklyRateChart({ data }: { data: WeeklyRatePoint[] }) {
+  const maxRate = Math.max(...data.map((d) => d.rate), 1);
+
+  return (
+    <div>
+      <div className="flex items-end gap-2 h-28 mb-2">
+        {data.map((point, i) => {
+          const height = Math.max((point.rate / maxRate) * 100, 4);
+          return (
+            <div key={i} className="flex-1 flex flex-col items-center gap-0.5 min-w-0">
+              <span className="text-[10px] font-medium text-gray-500 dark:text-gray-400">
+                {point.rate}%
+              </span>
+              <div
+                className="w-full bg-violet-400 dark:bg-violet-500 rounded-t hover:bg-violet-500 dark:hover:bg-violet-400 transition-colors cursor-default"
+                style={{ height: `${height}%` }}
+                title={`Week of ${formatDay(point.week)}: ${point.accepted}/${point.sent} (${point.rate}%)`}
+              />
+              <span className="text-[8px] text-gray-400 dark:text-gray-500 truncate w-full text-center">
+                {formatDay(point.week)}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      <div className="flex justify-between text-[10px] text-gray-400 dark:text-gray-500 px-1">
+        <span>accepted/sent per week</span>
+        <span>
+          {data.reduce((a, d) => a + d.accepted, 0)}/{data.reduce((a, d) => a + d.sent, 0)} total
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function ConversionTable({
+  rows,
+}: {
+  rows: { label: string; sent: number; accepted: number; rate: number }[];
+}) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-gray-200 dark:border-gray-700">
+            <th className="text-left py-2 pr-3 text-xs font-medium text-gray-500 dark:text-gray-400">
+              Name
+            </th>
+            <th className="text-right py-2 px-2 text-xs font-medium text-gray-500 dark:text-gray-400">
+              Sent
+            </th>
+            <th className="text-right py-2 px-2 text-xs font-medium text-gray-500 dark:text-gray-400">
+              Accepted
+            </th>
+            <th className="text-right py-2 pl-2 text-xs font-medium text-gray-500 dark:text-gray-400">
+              Rate
+            </th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-100 dark:divide-gray-700/50">
+          {rows.map((row) => (
+            <tr key={row.label}>
+              <td className="py-1.5 pr-3 text-gray-900 dark:text-white truncate max-w-[180px]">
+                {row.label}
+              </td>
+              <td className="py-1.5 px-2 text-right text-gray-600 dark:text-gray-400">
+                {row.sent}
+              </td>
+              <td className="py-1.5 px-2 text-right text-gray-600 dark:text-gray-400">
+                {row.accepted}
+              </td>
+              <td className="py-1.5 pl-2 text-right font-medium">
+                <span
+                  className={
+                    row.rate >= 30
+                      ? 'text-green-600 dark:text-green-400'
+                      : row.rate >= 15
+                        ? 'text-yellow-600 dark:text-yellow-400'
+                        : 'text-gray-600 dark:text-gray-400'
+                  }
+                >
+                  {row.rate}%
+                </span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

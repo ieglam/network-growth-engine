@@ -174,7 +174,19 @@
          │
          ▼
 ┌────────────────────┐
-│ Check Rate Limits  │ ─── Redis: requests_this_week < 100?
+│ Clear Today's      │ ─── Delete today's stale pending/approved items
+│ Stale Items        │
+└────────┬───────────┘
+         │
+         ▼
+┌────────────────────┐
+│ Carry Over Overdue │ ─── Move previous days' PENDING items to today
+│ Pending Items      │     Skipped & snoozed items are NOT carried over
+└────────┬───────────┘
+         │
+         ▼
+┌────────────────────┐
+│ Check Rate Limits  │ ─── DB: executed connection_requests this week < 100?
 └────────┬───────────┘
          │
          ▼
@@ -184,24 +196,30 @@
          │
          ▼
 ┌────────────────────┐
-│  Fetch Targets     │ ─── status = 'target'
-│  by Priority Score │     ORDER BY priority_score DESC
-└────────┬───────────┘     LIMIT daily_cap
+│ Exclude Recently   │ ─── Contacts skipped in last N days are excluded
+│ Skipped Contacts   │     N = Settings.skip_requeue_days (default 30)
+└────────┬───────────┘
          │
          ▼
 ┌────────────────────┐
-│ Select Templates   │ ─── Match template.persona to contact.category
-└────────┬───────────┘     A/B variant selection if multiple
+│  Fetch Targets     │ ─── status = 'target', not recently skipped,
+│  by Priority Score │     not already carried over
+└────────┬───────────┘     ORDER BY priority_score DESC, LIMIT daily_cap
+         │
+         ▼
+┌────────────────────┐
+│ Select Templates   │ ─── Match template.category to contact.category
+└────────┬───────────┘     Falls back to least-used active template
          │
          ▼
 ┌────────────────────┐
 │ Render Messages    │ ─── Replace tokens with contact data
 └────────┬───────────┘     {{first_name}}, {{company}}, etc.
-         │
+         │                 Flag items > 300 chars for manual editing
          ▼
 ┌────────────────────┐
 │ Add Follow-ups     │ ─── Connections from last 7 days without first message
-└────────┬───────────┘
+└────────┬───────────┘     (planned, not yet implemented)
          │
          ▼
 ┌────────────────────┐
@@ -210,14 +228,19 @@
          │
          ▼
 ┌────────────────────┐
-│ Add Overdue Items  │ ─── Yesterday's pending items
-└────────┬───────────┘
-         │
-         ▼
-┌────────────────────┐
 │  Create QueueItems │ ─── Insert into queue_items table
 └────────────────────┘     status = 'pending'
 ```
+
+#### Skip Requeue Behavior
+
+When a user skips a queue item, that contact is excluded from future daily queues
+for a configurable duration (default: 30 days). This prevents the same irrelevant
+contacts from resurfacing daily. The duration is controlled by the `skip_requeue_days`
+setting in the `settings` table.
+
+After the skip window expires, the contact becomes eligible for queue selection
+again based on their priority score.
 
 ### Scoring Batch Flow
 

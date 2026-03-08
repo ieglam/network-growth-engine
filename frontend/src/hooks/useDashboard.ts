@@ -21,6 +21,7 @@ export interface GrowthData {
   acceptanceTrend: number;
   totalSent: number;
   totalAccepted: number;
+  pendingRequests: number;
   rateLimit: RateLimitData;
   networkSize: number;
   weeklyGrowth: number;
@@ -68,5 +69,45 @@ export function useDashboardTrends() {
   return useQuery<{ success: boolean; data: TrendsData }>({
     queryKey: ['dashboard-trends'],
     queryFn: () => apiFetch('/dashboard/trends'),
+  });
+}
+
+export interface WeeklyRatePoint {
+  week: string;
+  sent: number;
+  accepted: number;
+  rate: number;
+}
+
+export interface DailySentPoint {
+  day: string;
+  count: number;
+}
+
+export interface CategoryConversion {
+  category: string;
+  sent: number;
+  accepted: number;
+  rate: number;
+}
+
+export interface TemplateConversion {
+  template: string;
+  sent: number;
+  accepted: number;
+  rate: number;
+}
+
+export interface ConversionData {
+  weeklyAcceptanceRate: WeeklyRatePoint[];
+  dailySent: DailySentPoint[];
+  byCategory: CategoryConversion[];
+  byTemplate: TemplateConversion[];
+}
+
+export function useDashboardConversion() {
+  return useQuery<{ success: boolean; data: ConversionData }>({
+    queryKey: ['dashboard-conversion'],
+    queryFn: () => apiFetch('/dashboard/conversion'),
   });
 }

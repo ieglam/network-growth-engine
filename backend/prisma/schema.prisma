@@ -156,6 +156,7 @@ model Category {
   id              String   @id @default(uuid())
   name            String   @unique @db.VarChar(100)
   relevanceWeight Int      @map("relevance_weight")
+  isProtected     Boolean  @default(false) @map("is_protected")
   createdAt       DateTime @default(now()) @map("created_at")
 
   contacts  ContactCategory[]
@@ -358,4 +359,15 @@ model Settings {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("settings")
+}
+
+model CompanyDescription {
+  id          String   @id @default(uuid())
+  companyName String   @unique @map("company_name") @db.VarChar(200)
+  description String
+  source      String   @db.VarChar(50)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("company_descriptions")
 }

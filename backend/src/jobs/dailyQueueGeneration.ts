@@ -25,7 +25,8 @@ export function createDailyQueueWorker(redisUrl: string) {
       const elapsed = ((Date.now() - start) / 1000).toFixed(1);
       console.log(
         `[${QUEUE_NAME}] Step 2/3: Generation complete in ${elapsed}s — ` +
-          `${result.connectionRequests} requests, ${result.reEngagements} re-engagements ` +
+          `${result.connectionRequests} requests, ${result.reEngagements} re-engagements, ` +
+          `${result.carriedOver} carried over ` +
           `(${result.flaggedForEditing} flagged for editing), total=${result.total}`
       );
 

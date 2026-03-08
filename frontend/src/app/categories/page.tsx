@@ -222,6 +222,9 @@ export default function CategoriesPage() {
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   Contacts
                 </th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  Protected
+                </th>
                 <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   Actions
                 </th>
@@ -252,6 +255,32 @@ export default function CategoriesPage() {
                     <span className="text-sm text-gray-600 dark:text-gray-400">
                       {c.contactCount ?? 0}
                     </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <button
+                      onClick={() =>
+                        updateCategory.mutate({
+                          id: c.id,
+                          data: { isProtected: !c.isProtected },
+                        })
+                      }
+                      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                        c.isProtected
+                          ? 'bg-amber-500'
+                          : 'bg-gray-300 dark:bg-gray-600'
+                      }`}
+                      title={
+                        c.isProtected
+                          ? 'Protected: contacts excluded from auto-categorization'
+                          : 'Not protected: contacts can be auto-categorized'
+                      }
+                    >
+                      <span
+                        className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                          c.isProtected ? 'translate-x-4.5' : 'translate-x-0.5'
+                        }`}
+                      />
+                    </button>
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-1">

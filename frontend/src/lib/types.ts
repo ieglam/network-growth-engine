@@ -39,6 +39,7 @@ export interface Category {
   id: string;
   name: string;
   relevanceWeight: number;
+  isProtected: boolean;
   contactCount?: number;
   createdAt: string;
 }

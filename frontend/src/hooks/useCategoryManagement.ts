@@ -32,7 +32,7 @@ export function useUpdateCategory() {
       data,
     }: {
       id: string;
-      data: { name?: string; relevanceWeight?: number };
+      data: { name?: string; relevanceWeight?: number; isProtected?: boolean };
     }) => {
       return apiFetch<{ success: boolean; data: Category }>(`/categories/${id}`, {
         method: 'PUT',

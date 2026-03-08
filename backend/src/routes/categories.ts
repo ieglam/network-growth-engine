@@ -10,6 +10,7 @@ const createCategorySchema = z.object({
 const updateCategorySchema = z.object({
   name: z.string().min(1).max(100).optional(),
   relevanceWeight: z.number().int().min(1).max(10).optional(),
+  isProtected: z.boolean().optional(),
 });
 
 const uuidParamSchema = z.object({
@@ -79,6 +80,7 @@ export async function categoryRoutes(fastify: FastifyInstance, _options: Fastify
         id: c.id,
         name: c.name,
         relevanceWeight: c.relevanceWeight,
+        isProtected: c.isProtected,
         contactCount: c._count.contacts,
         createdAt: c.createdAt,
       })),

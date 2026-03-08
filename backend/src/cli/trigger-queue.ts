@@ -12,6 +12,7 @@ async function main() {
   console.log(`Done in ${elapsed}s`);
   console.log(`  Connection requests: ${result.connectionRequests}`);
   console.log(`  Re-engagements:     ${result.reEngagements}`);
+  console.log(`  Carried over:       ${result.carriedOver}`);
   console.log(`  Flagged for editing: ${result.flaggedForEditing}`);
   console.log(`  Total:              ${result.total}`);
 
