@@ -7,7 +7,8 @@ export interface SearchCriteria {
   industries?: string[];
   keywords?: string;
   location?: string;
-  maxResults?: number; // default 100
+  maxResults?: number; // default 500
+  maxPages?: number; // default 5
 }
 
 export interface ScrapedProspect {
@@ -32,10 +33,10 @@ export interface SearchProgress {
 
 type ProgressCallback = (progress: SearchProgress) => void;
 
-const MAX_PROFILE_VIEWS_PER_DAY = 50;
-const PAGE_DELAY_MIN = 2000;
-const PAGE_DELAY_MAX = 5000;
-const DEFAULT_MAX_RESULTS = 100;
+const PAGE_DELAY_MIN = 3000;
+const PAGE_DELAY_MAX = 8000;
+const DEFAULT_MAX_RESULTS = 500;
+const DEFAULT_MAX_PAGES = 5;
 
 function randomDelay(): number {
   return PAGE_DELAY_MIN + Math.random() * (PAGE_DELAY_MAX - PAGE_DELAY_MIN);
@@ -298,10 +299,10 @@ export async function searchLinkedIn(
   onProgress?: ProgressCallback
 ): Promise<ScrapedProspect[]> {
   const maxResults = criteria.maxResults ?? DEFAULT_MAX_RESULTS;
+  const maxPages = criteria.maxPages ?? DEFAULT_MAX_PAGES;
   const allProspects: ScrapedProspect[] = [];
   const seenUrls = new Set<string>();
   let currentPage = 1;
-  let profileViewCount = 0;
 
   const report = (progress: Partial<SearchProgress>) => {
     onProgress?.({
@@ -321,7 +322,7 @@ export async function searchLinkedIn(
   const page = await newPage();
 
   try {
-    while (allProspects.length < maxResults && profileViewCount < MAX_PROFILE_VIEWS_PER_DAY) {
+    while (allProspects.length < maxResults && currentPage <= maxPages) {
       report({
         status: 'searching',
         message: `Loading search page ${currentPage}...`,
@@ -366,7 +367,6 @@ export async function searchLinkedIn(
       });
 
       const pageProspects = await scrapeSearchPage(page);
-      profileViewCount += pageProspects.length;
 
       // Deduplicate by LinkedIn URL
       for (const prospect of pageProspects) {

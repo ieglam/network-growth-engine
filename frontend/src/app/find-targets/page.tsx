@@ -8,6 +8,11 @@ import {
   useSearchHistory,
   useImportProspects,
   useRegenerateQueue,
+  useSavedSearches,
+  useSaveSearch,
+  useUpdateSavedSearch,
+  useDeleteSavedSearch,
+  useRunSavedSearch,
   type SearchCriteria,
   type ScrapedProspect,
 } from '@/hooks/useLinkedInSearch';
@@ -93,7 +98,8 @@ export default function FindTargetsPage() {
   const [industries, setIndustries] = useState<string[]>(['Cryptocurrency', 'Financial Services']);
   const [keywords, setKeywords] = useState('');
   const [location, setLocation] = useState('');
-  const [maxResults, setMaxResults] = useState(50);
+  const [maxResults, setMaxResults] = useState(250);
+  const [maxPages, setMaxPages] = useState(5);
 
   const [selectedUrls, setSelectedUrls] = useState<Set<string>>(new Set());
   const [isSearching, setIsSearching] = useState(false);
@@ -102,12 +108,20 @@ export default function FindTargetsPage() {
     duplicatesSkipped: number;
     errors: number;
   } | null>(null);
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [saveName, setSaveName] = useState('');
+  const [saveScheduled, setSaveScheduled] = useState(false);
 
   const startSearch = useStartSearch();
   const { data: progressData } = useSearchProgress(isSearching);
   const { data: historyData } = useSearchHistory();
   const importProspects = useImportProspects();
   const regenerateQueue = useRegenerateQueue();
+  const { data: savedData } = useSavedSearches();
+  const saveSearch = useSaveSearch();
+  const updateSavedSearch = useUpdateSavedSearch();
+  const deleteSavedSearch = useDeleteSavedSearch();
+  const runSavedSearch = useRunSavedSearch();
 
   const progress = progressData?.data?.progress;
   const results: ScrapedProspect[] = useMemo(
@@ -115,6 +129,49 @@ export default function FindTargetsPage() {
     [progressData?.data?.results]
   );
   const history = historyData?.data ?? [];
+  const savedSearches = savedData?.data ?? [];
+
+  const buildCriteria = (): SearchCriteria => {
+    const criteria: SearchCriteria = { maxResults, maxPages };
+    if (jobTitles.length > 0) criteria.jobTitles = jobTitles;
+    if (companies.length > 0) criteria.companies = companies;
+    if (industries.length > 0) criteria.industries = industries;
+    if (keywords.trim()) criteria.keywords = keywords.trim();
+    if (location.trim()) criteria.location = location.trim();
+    return criteria;
+  };
+
+  const loadCriteria = (c: SearchCriteria) => {
+    setJobTitles(c.jobTitles ?? []);
+    setCompanies(c.companies ?? []);
+    setIndustries(c.industries ?? []);
+    setKeywords(c.keywords ?? '');
+    setLocation(c.location ?? '');
+    setMaxResults(c.maxResults ?? 250);
+    setMaxPages(c.maxPages ?? 5);
+  };
+
+  const handleSaveSearch = () => {
+    if (!saveName.trim()) return;
+    saveSearch.mutate(
+      { name: saveName.trim(), criteria: buildCriteria(), isScheduled: saveScheduled },
+      {
+        onSuccess: () => {
+          setShowSaveDialog(false);
+          setSaveName('');
+          setSaveScheduled(false);
+        },
+      }
+    );
+  };
+
+  const handleRunSaved = (id: string, criteria: SearchCriteria) => {
+    loadCriteria(criteria);
+    setIsSearching(true);
+    setImportResult(null);
+    setSelectedUrls(new Set());
+    runSavedSearch.mutate(id);
+  };
 
   // Track search completion
   useEffect(() => {
@@ -124,19 +181,10 @@ export default function FindTargetsPage() {
   }, [progress?.status]);
 
   const handleSearch = () => {
-    const criteria: SearchCriteria = {
-      maxResults,
-    };
-    if (jobTitles.length > 0) criteria.jobTitles = jobTitles;
-    if (companies.length > 0) criteria.companies = companies;
-    if (industries.length > 0) criteria.industries = industries;
-    if (keywords.trim()) criteria.keywords = keywords.trim();
-    if (location.trim()) criteria.location = location.trim();
-
     setIsSearching(true);
     setImportResult(null);
     setSelectedUrls(new Set());
-    startSearch.mutate(criteria);
+    startSearch.mutate(buildCriteria());
   };
 
   const toggleSelect = (url: string) => {
@@ -239,9 +287,22 @@ export default function FindTargetsPage() {
             <input
               type="number"
               value={maxResults}
-              onChange={(e) => setMaxResults(Math.min(100, Math.max(1, Number(e.target.value))))}
+              onChange={(e) => setMaxResults(Math.min(500, Math.max(1, Number(e.target.value))))}
               min={1}
-              max={100}
+              max={500}
+              className="w-full rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm text-gray-900 dark:text-gray-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Max Pages (10 results/page)
+            </label>
+            <input
+              type="number"
+              value={maxPages}
+              onChange={(e) => setMaxPages(Math.min(10, Math.max(1, Number(e.target.value))))}
+              min={1}
+              max={10}
               className="w-full rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm text-gray-900 dark:text-gray-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
           </div>
@@ -255,6 +316,13 @@ export default function FindTargetsPage() {
           >
             {isRunning ? 'Searching...' : 'Search LinkedIn'}
           </button>
+          <button
+            onClick={() => setShowSaveDialog(true)}
+            disabled={isRunning}
+            className="px-4 py-2 bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 text-sm font-medium rounded-lg hover:bg-gray-200 dark:hover:bg-slate-600 disabled:opacity-50"
+          >
+            Save Search
+          </button>
           {isRunning && (
             <div className="flex items-center gap-2">
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-600" />
@@ -264,6 +332,47 @@ export default function FindTargetsPage() {
             </div>
           )}
         </div>
+
+        {/* Save Search Dialog */}
+        {showSaveDialog && (
+          <div className="border border-primary-200 dark:border-primary-800 bg-primary-50 dark:bg-primary-900/20 rounded-lg p-4 space-y-3">
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Save Current Search</h3>
+            <div className="flex items-center gap-3">
+              <input
+                type="text"
+                value={saveName}
+                onChange={(e) => setSaveName(e.target.value)}
+                placeholder="Search name (e.g. Crypto Compliance Officers)"
+                onKeyDown={(e) => e.key === 'Enter' && handleSaveSearch()}
+                className="flex-1 rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm text-gray-900 dark:text-gray-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+              <label className="flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
+                <input
+                  type="checkbox"
+                  checked={saveScheduled}
+                  onChange={(e) => setSaveScheduled(e.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                />
+                Auto-run weekly
+              </label>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleSaveSearch}
+                disabled={!saveName.trim() || saveSearch.isPending}
+                className="px-3 py-1.5 bg-primary-600 text-white text-sm font-medium rounded-lg hover:bg-primary-700 disabled:opacity-50"
+              >
+                {saveSearch.isPending ? 'Saving...' : 'Save'}
+              </button>
+              <button
+                onClick={() => { setShowSaveDialog(false); setSaveName(''); setSaveScheduled(false); }}
+                className="px-3 py-1.5 text-gray-600 dark:text-gray-400 text-sm hover:text-gray-900 dark:hover:text-white"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Progress Bar */}
@@ -271,7 +380,7 @@ export default function FindTargetsPage() {
         <div className="bg-white dark:bg-slate-900 rounded-lg border border-gray-200 dark:border-slate-700 p-4">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-              Page {progress.currentPage} &middot; {progress.scraped} found
+              Page {progress.currentPage}/{maxPages} &middot; {progress.scraped} found
             </span>
             <span className="text-xs text-gray-500 dark:text-gray-400 capitalize">
               {progress.status}
@@ -427,11 +536,88 @@ export default function FindTargetsPage() {
         </div>
       )}
 
+      {/* Saved Searches */}
+      {savedSearches.length > 0 && (
+        <div className="bg-white dark:bg-slate-900 rounded-lg border border-gray-200 dark:border-slate-700 p-4">
+          <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+            Saved Searches
+          </h2>
+          <div className="space-y-2">
+            {savedSearches.map((saved) => {
+              const criteria = saved.criteria as SearchCriteria;
+              const summary = [
+                criteria.jobTitles?.join(', '),
+                criteria.industries?.join(', '),
+                criteria.location,
+                criteria.keywords,
+              ].filter(Boolean).join(' / ') || 'General search';
+
+              return (
+                <div
+                  key={saved.id}
+                  className="flex items-center justify-between text-sm border-b border-gray-100 dark:border-slate-800 pb-2 last:border-0"
+                >
+                  <div className="flex-1 min-w-0">
+                    <span className="font-medium text-gray-900 dark:text-white">{saved.name}</span>
+                    <span className="text-gray-500 dark:text-gray-400 ml-2 text-xs">{summary}</span>
+                    {saved.isScheduled && (
+                      <span className="ml-2 px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-xs rounded">
+                        weekly
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 ml-3">
+                    {saved.lastRunAt && (
+                      <>
+                        <span>{saved.lastRunCount} found</span>
+                        <span>{saved.totalImported} imported</span>
+                        <span>{new Date(saved.lastRunAt).toLocaleDateString()}</span>
+                      </>
+                    )}
+                    <button
+                      onClick={() => handleRunSaved(saved.id, criteria)}
+                      disabled={isRunning}
+                      className="px-2 py-1 bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 rounded hover:bg-primary-200 dark:hover:bg-primary-900/50 disabled:opacity-50"
+                    >
+                      Run
+                    </button>
+                    <button
+                      onClick={() => loadCriteria(criteria)}
+                      className="px-2 py-1 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+                      title="Load into form"
+                    >
+                      Load
+                    </button>
+                    <button
+                      onClick={() => updateSavedSearch.mutate({ id: saved.id, isScheduled: !saved.isScheduled })}
+                      className={`px-2 py-1 rounded text-xs ${
+                        saved.isScheduled
+                          ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                          : 'text-gray-400 hover:text-blue-600'
+                      }`}
+                      title={saved.isScheduled ? 'Disable weekly auto-run' : 'Enable weekly auto-run'}
+                    >
+                      {saved.isScheduled ? 'Sched' : 'Sched'}
+                    </button>
+                    <button
+                      onClick={() => { if (confirm(`Delete "${saved.name}"?`)) deleteSavedSearch.mutate(saved.id); }}
+                      className="px-2 py-1 text-red-400 hover:text-red-600"
+                    >
+                      Del
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Search History */}
       {history.length > 0 && (
         <div className="bg-white dark:bg-slate-900 rounded-lg border border-gray-200 dark:border-slate-700 p-4">
           <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
-            Search History
+            Recent Runs
           </h2>
           <div className="space-y-2">
             {history.slice(0, 10).map((entry) => (
@@ -441,14 +627,12 @@ export default function FindTargetsPage() {
               >
                 <div>
                   <span className="text-gray-700 dark:text-gray-300">
-                    {[
+                    {entry.name || [
                       entry.criteria.jobTitles?.join(', '),
                       entry.criteria.industries?.join(', '),
                       entry.criteria.location,
                       entry.criteria.keywords,
-                    ]
-                      .filter(Boolean)
-                      .join(' / ') || 'General search'}
+                    ].filter(Boolean).join(' / ') || 'General search'}
                   </span>
                 </div>
                 <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">

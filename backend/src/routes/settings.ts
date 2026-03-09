@@ -13,6 +13,7 @@ const settingValidators: Record<string, z.ZodType> = {
   notification_morning: z.enum(['true', 'false']),
   notification_afternoon: z.enum(['true', 'false']),
   network_goal: z.coerce.number().int().min(1),
+  max_per_company: z.coerce.number().int().min(1).max(50),
 };
 
 export async function settingsRoutes(fastify: FastifyInstance, _options: FastifyPluginOptions) {

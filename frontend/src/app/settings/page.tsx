@@ -8,6 +8,7 @@ interface SettingsForm {
   linkedin_weekly_limit: string;
   linkedin_daily_limit: string;
   cooldown_days: string;
+  max_per_company: string;
   guided_mode: string;
   notification_morning: string;
   notification_afternoon: string;
@@ -19,6 +20,7 @@ const DEFAULTS: SettingsForm = {
   linkedin_weekly_limit: '100',
   linkedin_daily_limit: '20',
   cooldown_days: '7',
+  max_per_company: '3',
   guided_mode: 'true',
   notification_morning: 'true',
   notification_afternoon: 'true',
@@ -141,6 +143,22 @@ export default function SettingsPage() {
               />
               <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
                 Days to pause after detecting a soft ban signal
+              </p>
+            </div>
+            <div>
+              <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
+                Max Per Company
+              </label>
+              <input
+                type="number"
+                min={1}
+                max={50}
+                value={form.max_per_company}
+                onChange={(e) => setField('max_per_company', e.target.value)}
+                className="w-32 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                Max contacts from the same company in one day&apos;s queue
               </p>
             </div>
           </div>

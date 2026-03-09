@@ -361,6 +361,20 @@ model Settings {
   @@map("settings")
 }
 
+model SavedSearch {
+  id            String    @id @default(uuid())
+  name          String    @db.VarChar(200)
+  criteria      Json
+  lastRunAt     DateTime? @map("last_run_at")
+  lastRunCount  Int       @default(0) @map("last_run_count")
+  totalImported Int       @default(0) @map("total_imported")
+  isScheduled   Boolean   @default(false) @map("is_scheduled")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  @@map("saved_searches")
+}
+
 model CompanyDescription {
   id          String   @id @default(uuid())
   companyName String   @unique @map("company_name") @db.VarChar(200)

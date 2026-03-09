@@ -14,16 +14,7 @@ import { processAllPriorityScores } from '../services/priorityScoringService.js'
 // In-memory store for search progress and results (single-user app)
 let currentSearchProgress: SearchProgress | null = null;
 let lastSearchResults: ScrapedProspect[] = [];
-
-interface SearchHistoryEntry {
-  id: string;
-  criteria: SearchCriteria;
-  resultCount: number;
-  importedCount: number;
-  searchedAt: string;
-}
-
-const searchHistory: SearchHistoryEntry[] = [];
+let lastSearchSavedSearchId: string | null = null;
 
 const searchCriteriaSchema = z.object({
   jobTitles: z.array(z.string()).optional(),
@@ -31,7 +22,8 @@ const searchCriteriaSchema = z.object({
   industries: z.array(z.string()).optional(),
   keywords: z.string().optional(),
   location: z.string().optional(),
-  maxResults: z.number().min(1).max(100).optional(),
+  maxResults: z.number().min(1).max(500).optional(),
+  maxPages: z.number().min(1).max(10).optional(),
 });
 
 const importBodySchema = z.object({
@@ -56,7 +48,10 @@ export async function linkedinSearchRoutes(
 ) {
   // POST /api/linkedin/search — Trigger a search
   fastify.post('/linkedin/search', async (request, reply) => {
-    const bodyResult = searchCriteriaSchema.safeParse(request.body);
+    const bodySchema = searchCriteriaSchema.extend({
+      savedSearchId: z.string().uuid().optional(),
+    });
+    const bodyResult = bodySchema.safeParse(request.body);
     if (!bodyResult.success) {
       return reply.status(400).send({
         success: false,
@@ -64,7 +59,7 @@ export async function linkedinSearchRoutes(
       });
     }
 
-    const criteria = bodyResult.data as SearchCriteria;
+    const { savedSearchId, ...criteria } = bodyResult.data;
 
     // Check if a search is already running
     if (
@@ -86,23 +81,22 @@ export async function linkedinSearchRoutes(
       scraped: 0,
       message: 'Starting search...',
     };
+    lastSearchSavedSearchId = savedSearchId ?? null;
 
     // Run search in background (don't await)
-    searchLinkedIn(criteria, (progress) => {
+    searchLinkedIn(criteria as SearchCriteria, (progress) => {
       currentSearchProgress = progress;
     })
-      .then((results) => {
+      .then(async (results) => {
         lastSearchResults = results;
-        const historyId = crypto.randomUUID();
-        searchHistory.unshift({
-          id: historyId,
-          criteria,
-          resultCount: results.length,
-          importedCount: 0,
-          searchedAt: new Date().toISOString(),
-        });
-        // Keep only last 50 entries
-        if (searchHistory.length > 50) searchHistory.length = 50;
+
+        // Update saved search record if this was a rerun
+        if (savedSearchId) {
+          await prisma.savedSearch.update({
+            where: { id: savedSearchId },
+            data: { lastRunAt: new Date(), lastRunCount: results.length },
+          }).catch(() => {});
+        }
       })
       .catch((error) => {
         currentSearchProgress = {
@@ -143,11 +137,23 @@ export async function linkedinSearchRoutes(
     };
   });
 
-  // GET /api/linkedin/search/history — Get past searches
+  // GET /api/linkedin/search/history — Get past searches (from DB)
   fastify.get('/linkedin/search/history', async () => {
+    const searches = await prisma.savedSearch.findMany({
+      orderBy: { lastRunAt: { sort: 'desc', nulls: 'last' } },
+      take: 50,
+    });
     return {
       success: true,
-      data: searchHistory,
+      data: searches.map((s) => ({
+        id: s.id,
+        criteria: s.criteria as SearchCriteria,
+        resultCount: s.lastRunCount,
+        importedCount: s.totalImported,
+        searchedAt: (s.lastRunAt ?? s.createdAt).toISOString(),
+        name: s.name,
+        isScheduled: s.isScheduled,
+      })),
     };
   });
 
@@ -163,14 +169,144 @@ export async function linkedinSearchRoutes(
 
     const result = await importProspects(bodyResult.data.prospects);
 
-    // Update the latest search history entry with import count
-    if (searchHistory.length > 0) {
-      searchHistory[0].importedCount += result.imported;
+    // Update saved search record with import count
+    if (lastSearchSavedSearchId) {
+      await prisma.savedSearch.update({
+        where: { id: lastSearchSavedSearchId },
+        data: { totalImported: { increment: result.imported } },
+      }).catch(() => {});
     }
 
     return {
       success: true,
       data: result,
+    };
+  });
+
+  // ─── Saved Searches CRUD ────────────────────────────────────────────────────
+
+  // GET /api/linkedin/search/saved — List all saved searches
+  fastify.get('/linkedin/search/saved', async () => {
+    const searches = await prisma.savedSearch.findMany({
+      orderBy: { updatedAt: 'desc' },
+    });
+    return { success: true, data: searches };
+  });
+
+  // POST /api/linkedin/search/saved — Save a new search
+  fastify.post('/linkedin/search/saved', async (request, reply) => {
+    const bodyResult = z
+      .object({
+        name: z.string().min(1).max(200),
+        criteria: searchCriteriaSchema,
+        isScheduled: z.boolean().optional(),
+      })
+      .safeParse(request.body);
+    if (!bodyResult.success) {
+      return reply.status(400).send({
+        success: false,
+        error: { code: 'VALIDATION_ERROR', message: bodyResult.error.message },
+      });
+    }
+    const saved = await prisma.savedSearch.create({
+      data: {
+        name: bodyResult.data.name,
+        criteria: bodyResult.data.criteria as object,
+        isScheduled: bodyResult.data.isScheduled ?? false,
+      },
+    });
+    return { success: true, data: saved };
+  });
+
+  // PUT /api/linkedin/search/saved/:id — Update a saved search
+  fastify.put('/linkedin/search/saved/:id', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const bodyResult = z
+      .object({
+        name: z.string().min(1).max(200).optional(),
+        criteria: searchCriteriaSchema.optional(),
+        isScheduled: z.boolean().optional(),
+      })
+      .safeParse(request.body);
+    if (!bodyResult.success) {
+      return reply.status(400).send({
+        success: false,
+        error: { code: 'VALIDATION_ERROR', message: bodyResult.error.message },
+      });
+    }
+    const data: Record<string, unknown> = {};
+    if (bodyResult.data.name !== undefined) data.name = bodyResult.data.name;
+    if (bodyResult.data.criteria !== undefined) data.criteria = bodyResult.data.criteria as object;
+    if (bodyResult.data.isScheduled !== undefined) data.isScheduled = bodyResult.data.isScheduled;
+
+    const saved = await prisma.savedSearch.update({ where: { id }, data });
+    return { success: true, data: saved };
+  });
+
+  // DELETE /api/linkedin/search/saved/:id — Delete a saved search
+  fastify.delete('/linkedin/search/saved/:id', async (request) => {
+    const { id } = request.params as { id: string };
+    await prisma.savedSearch.delete({ where: { id } });
+    return { success: true };
+  });
+
+  // POST /api/linkedin/search/saved/:id/run — Rerun a saved search
+  fastify.post('/linkedin/search/saved/:id/run', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const saved = await prisma.savedSearch.findUnique({ where: { id } });
+    if (!saved) {
+      return reply.status(404).send({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'Saved search not found' },
+      });
+    }
+
+    // Check if a search is already running
+    if (
+      currentSearchProgress &&
+      currentSearchProgress.status !== 'complete' &&
+      currentSearchProgress.status !== 'error'
+    ) {
+      return reply.status(409).send({
+        success: false,
+        error: { code: 'SEARCH_IN_PROGRESS', message: 'A search is already running' },
+      });
+    }
+
+    const criteria = saved.criteria as SearchCriteria;
+
+    currentSearchProgress = {
+      status: 'initializing',
+      currentPage: 0,
+      totalFound: 0,
+      scraped: 0,
+      message: `Rerunning "${saved.name}"...`,
+    };
+    lastSearchSavedSearchId = id;
+
+    searchLinkedIn(criteria, (progress) => {
+      currentSearchProgress = progress;
+    })
+      .then(async (results) => {
+        lastSearchResults = results;
+        await prisma.savedSearch.update({
+          where: { id },
+          data: { lastRunAt: new Date(), lastRunCount: results.length },
+        }).catch(() => {});
+      })
+      .catch((error) => {
+        currentSearchProgress = {
+          status: 'error',
+          currentPage: 0,
+          totalFound: 0,
+          scraped: 0,
+          message: error instanceof Error ? error.message : 'Search failed',
+        };
+      });
+
+    return {
+      success: true,
+      data: { message: `Search "${saved.name}" started`, progress: currentSearchProgress },
     };
   });
 

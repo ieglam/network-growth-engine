@@ -11,6 +11,11 @@ import {
   createScoreBatchWorker,
   scheduleScoreBatch,
 } from '../jobs/scoreBatchProcessor.js';
+import {
+  createWeeklySearchQueue,
+  createWeeklySearchWorker,
+  scheduleWeeklySearch,
+} from '../jobs/weeklySearchJob.js';
 
 async function startWorkers() {
   const redisUrl = config.redisUrl;
@@ -39,6 +44,15 @@ async function startWorkers() {
     console.log(`[score-batch-processor] Job ${job.id} completed`);
   });
 
+  // Weekly search (Sunday 8 AM Mexico City)
+  const weeklySearchQueue = createWeeklySearchQueue(redisUrl);
+  const weeklySearchWorker = createWeeklySearchWorker(redisUrl);
+  await scheduleWeeklySearch(weeklySearchQueue);
+
+  weeklySearchWorker.on('completed', (job) => {
+    console.log(`[weekly-search] Job ${job.id} completed`);
+  });
+
   console.log(`
 ╔═══════════════════════════════════════════════════════════╗
 ║     Network Growth Engine - Workers                       ║
@@ -62,6 +76,10 @@ async function startWorkers() {
   }
   const scoreSchedulers = await scoreBatchQueue.getJobSchedulers();
   for (const s of scoreSchedulers) {
+    console.log(`[scheduler] id=${s.id} pattern=${s.pattern} tz=${s.tz} next=${s.next ? new Date(s.next).toISOString() : 'none'}`);
+  }
+  const weeklySchedulers = await weeklySearchQueue.getJobSchedulers();
+  for (const s of weeklySchedulers) {
     console.log(`[scheduler] id=${s.id} pattern=${s.pattern} tz=${s.tz} next=${s.next ? new Date(s.next).toISOString() : 'none'}`);
   }
 }

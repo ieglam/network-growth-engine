@@ -8,6 +8,7 @@ export interface SearchCriteria {
   keywords?: string;
   location?: string;
   maxResults?: number;
+  maxPages?: number;
 }
 
 export interface ScrapedProspect {
@@ -47,6 +48,19 @@ export interface SearchHistoryEntry {
   resultCount: number;
   importedCount: number;
   searchedAt: string;
+  name?: string;
+  isScheduled?: boolean;
+}
+
+export interface SavedSearch {
+  id: string;
+  name: string;
+  criteria: SearchCriteria;
+  lastRunAt: string | null;
+  lastRunCount: number;
+  totalImported: number;
+  isScheduled: boolean;
+  createdAt: string;
 }
 
 export function useSearchProgress(enabled: boolean) {
@@ -80,10 +94,10 @@ export function useSearchHistory() {
 export function useStartSearch() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (criteria: SearchCriteria) => {
+    mutationFn: async (params: SearchCriteria & { savedSearchId?: string }) => {
       return apiFetch('/linkedin/search', {
         method: 'POST',
-        body: JSON.stringify(criteria),
+        body: JSON.stringify(params),
       });
     },
     onSuccess: () => {
@@ -121,6 +135,74 @@ export function useRegenerateQueue() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['queue-today'] });
       queryClient.invalidateQueries({ queryKey: ['queue-summary'] });
+    },
+  });
+}
+
+// ─── Saved Searches ──────────────────────────────────────────────────────────
+
+export function useSavedSearches() {
+  return useQuery<{ success: boolean; data: SavedSearch[] }>({
+    queryKey: ['saved-searches'],
+    queryFn: () => apiFetch('/linkedin/search/saved'),
+  });
+}
+
+export function useSaveSearch() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (params: { name: string; criteria: SearchCriteria; isScheduled?: boolean }) => {
+      return apiFetch('/linkedin/search/saved', {
+        method: 'POST',
+        body: JSON.stringify(params),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['saved-searches'] });
+      queryClient.invalidateQueries({ queryKey: ['linkedin-search-history'] });
+    },
+  });
+}
+
+export function useUpdateSavedSearch() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (params: { id: string; name?: string; isScheduled?: boolean }) => {
+      const { id, ...body } = params;
+      return apiFetch(`/linkedin/search/saved/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(body),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['saved-searches'] });
+      queryClient.invalidateQueries({ queryKey: ['linkedin-search-history'] });
+    },
+  });
+}
+
+export function useDeleteSavedSearch() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      return apiFetch(`/linkedin/search/saved/${id}`, { method: 'DELETE' });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['saved-searches'] });
+      queryClient.invalidateQueries({ queryKey: ['linkedin-search-history'] });
+    },
+  });
+}
+
+export function useRunSavedSearch() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      return apiFetch(`/linkedin/search/saved/${id}/run`, { method: 'POST' });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['linkedin-search-progress'] });
+      queryClient.invalidateQueries({ queryKey: ['saved-searches'] });
     },
   });
 }

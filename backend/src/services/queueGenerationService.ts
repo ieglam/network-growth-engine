@@ -2,6 +2,7 @@ import { prisma } from '../lib/prisma.js';
 
 const TEMPLATE_MAX_LENGTH = 300;
 const DEFAULT_SKIP_REQUEUE_DAYS = 30;
+const DEFAULT_MAX_PER_COMPANY = 3;
 
 export interface QueueGenerationResult {
   connectionRequests: number;
@@ -31,6 +32,19 @@ async function getSkipRequeueDays(): Promise<number> {
 }
 
 /**
+ * Get the maximum number of contacts from the same company in a single day's queue.
+ * Reads from the Settings table; falls back to DEFAULT_MAX_PER_COMPANY.
+ */
+async function getMaxPerCompany(): Promise<number> {
+  const setting = await prisma.settings.findUnique({
+    where: { key: 'max_per_company' },
+  });
+  if (!setting) return DEFAULT_MAX_PER_COMPANY;
+  const parsed = parseInt(setting.value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_MAX_PER_COMPANY;
+}
+
+/**
  * Find the best matching template for a contact based on their categories.
  * Uses exact categoryId FK match. Falls back to least-used active template.
  */
@@ -39,7 +53,7 @@ async function findTemplateForContact(
 ): Promise<{ id: string; body: string } | null> {
   const contact = await prisma.contact.findFirst({
     where: { id: contactId, deletedAt: null },
-    include: { categories: { select: { categoryId: true } } },
+    include: { categories: { include: { category: { select: { id: true, relevanceWeight: true } } } } },
   });
 
   if (!contact) return null;
@@ -47,12 +61,29 @@ async function findTemplateForContact(
   const categoryIds = contact.categories.map((cc) => cc.categoryId);
 
   if (categoryIds.length > 0) {
-    const matched = await prisma.template.findFirst({
+    // Build a map of categoryId → relevanceWeight so we can pick the most
+    // specific (highest-weight) category's template instead of an arbitrary one.
+    const weightById = new Map<string, number>();
+    for (const cc of contact.categories) {
+      weightById.set(cc.categoryId, cc.category.relevanceWeight);
+    }
+
+    const candidates = await prisma.template.findMany({
       where: { isActive: true, categoryId: { in: categoryIds } },
-      orderBy: { timesUsed: 'asc' },
     });
 
-    if (matched) return { id: matched.id, body: matched.body };
+    if (candidates.length > 0) {
+      // Sort by category relevanceWeight DESC, then timesUsed ASC as tiebreaker
+      candidates.sort((a, b) => {
+        const wA = weightById.get(a.categoryId!) ?? 0;
+        const wB = weightById.get(b.categoryId!) ?? 0;
+        if (wB !== wA) return wB - wA;
+        return a.timesUsed - b.timesUsed;
+      });
+
+      const best = candidates[0];
+      return { id: best.id, body: best.body };
+    }
   }
 
   // Fallback: least-used active template
@@ -152,22 +183,152 @@ export async function generateDailyQueue(options?: {
 
   const skippedContactIds = new Set(recentlySkippedItems.map((i) => i.contactId));
 
-  // 5. Select top targets by priority_score, excluding carried-over and recently-skipped
+  // 5. Select targets with diversity constraints (company cap + category spread)
   const requestSlots = Math.min(maxNewRequests, remainingCapacity);
   const excludeIds = [...alreadyQueued, ...skippedContactIds];
+  const maxPerCompany = await getMaxPerCompany();
 
   if (requestSlots > 0) {
-    const targets = await prisma.contact.findMany({
+    // Fetch a larger candidate pool sorted by priority — we need extras to
+    // backfill slots when company/category caps exclude high-priority contacts.
+    const candidatePool = await prisma.contact.findMany({
       where: {
         status: 'target',
         deletedAt: null,
         ...(excludeIds.length > 0 ? { id: { notIn: excludeIds } } : {}),
       },
+      include: {
+        categories: { select: { categoryId: true } },
+      },
       orderBy: { priorityScore: 'desc' },
-      take: requestSlots,
+      take: requestSlots * 5,
     });
 
-    for (const target of targets) {
+    // Build category weight map for proportional allocation
+    const activeCategoryIds = new Set<string>();
+    for (const c of candidatePool) {
+      for (const cc of c.categories) {
+        activeCategoryIds.add(cc.categoryId);
+      }
+    }
+
+    const categoryWeights = new Map<string, number>();
+    if (activeCategoryIds.size > 0) {
+      const cats = await prisma.category.findMany({
+        where: { id: { in: Array.from(activeCategoryIds) } },
+        select: { id: true, relevanceWeight: true },
+      });
+      for (const cat of cats) {
+        categoryWeights.set(cat.id, cat.relevanceWeight);
+      }
+    }
+
+    // Assign each contact a "primary category" — their highest-weight category
+    function primaryCategory(contact: (typeof candidatePool)[0]): string | null {
+      let bestId: string | null = null;
+      let bestWeight = -1;
+      for (const cc of contact.categories) {
+        const w = categoryWeights.get(cc.categoryId) ?? 0;
+        if (w > bestWeight) {
+          bestWeight = w;
+          bestId = cc.categoryId;
+        }
+      }
+      return bestId;
+    }
+
+    // Calculate proportional slots per category based on relevance weights.
+    // Categories with higher weights get proportionally more slots.
+    const categoryCandidateCounts = new Map<string | null, number>();
+    for (const c of candidatePool) {
+      const cat = primaryCategory(c);
+      categoryCandidateCounts.set(cat, (categoryCandidateCounts.get(cat) ?? 0) + 1);
+    }
+
+    const categorySlots = new Map<string | null, number>();
+    const representedCategories = Array.from(categoryCandidateCounts.keys());
+
+    if (representedCategories.length > 0) {
+      let totalWeight = 0;
+      for (const catId of representedCategories) {
+        totalWeight += catId ? (categoryWeights.get(catId) ?? 1) : 1;
+      }
+
+      let allocated = 0;
+      for (const catId of representedCategories) {
+        const w = catId ? (categoryWeights.get(catId) ?? 1) : 1;
+        // Each category gets at least 1 slot if it has candidates
+        const slots = Math.max(1, Math.round((w / totalWeight) * requestSlots));
+        categorySlots.set(catId, slots);
+        allocated += slots;
+      }
+
+      // If rounding gave us too many/few, adjust the largest category
+      if (allocated !== requestSlots) {
+        let largestCat: string | null = null;
+        let largestSlots = 0;
+        for (const [catId, slots] of categorySlots) {
+          if (slots > largestSlots) {
+            largestSlots = slots;
+            largestCat = catId;
+          }
+        }
+        if (largestCat !== null || categorySlots.has(null)) {
+          const adjustCat = largestCat;
+          categorySlots.set(adjustCat, (categorySlots.get(adjustCat) ?? 0) + (requestSlots - allocated));
+        }
+      }
+    }
+
+    // Select contacts with diversity constraints
+    const selected: (typeof candidatePool)[0][] = [];
+    const companyCounts = new Map<string, number>();
+    const categoryFilled = new Map<string | null, number>();
+    const deferred: (typeof candidatePool)[0][] = [];
+
+    for (const candidate of candidatePool) {
+      if (selected.length >= requestSlots) break;
+
+      // Enforce company cap
+      const companyKey = (candidate.company || '').trim().toLowerCase();
+      if (companyKey && (companyCounts.get(companyKey) ?? 0) >= maxPerCompany) {
+        continue;
+      }
+
+      // Check category slot availability — defer if this category is full
+      const catId = primaryCategory(candidate);
+      const maxForCat = categorySlots.get(catId) ?? 1;
+      const filledForCat = categoryFilled.get(catId) ?? 0;
+
+      if (filledForCat >= maxForCat) {
+        deferred.push(candidate);
+        continue;
+      }
+
+      selected.push(candidate);
+      if (companyKey) {
+        companyCounts.set(companyKey, (companyCounts.get(companyKey) ?? 0) + 1);
+      }
+      categoryFilled.set(catId, filledForCat + 1);
+    }
+
+    // Backfill remaining slots from deferred contacts (still respecting company cap)
+    for (const candidate of deferred) {
+      if (selected.length >= requestSlots) break;
+
+      const companyKey = (candidate.company || '').trim().toLowerCase();
+      if (companyKey && (companyCounts.get(companyKey) ?? 0) >= maxPerCompany) {
+        continue;
+      }
+
+      selected.push(candidate);
+      if (companyKey) {
+        companyCounts.set(companyKey, (companyCounts.get(companyKey) ?? 0) + 1);
+      }
+    }
+
+    // Create queue items for selected contacts
+    for (const target of selected) {
       const template = await findTemplateForContact(target.id);
       let personalizedMessage: string | null = null;
       let flagged = false;

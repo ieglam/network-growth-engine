@@ -29,8 +29,8 @@ const configSchema = z.object({
   // LinkedIn Rate Limits
   linkedinWeeklyLimit: z.coerce.number().default(100),
   linkedinDailyLimit: z.coerce.number().default(20),
-  linkedinRequestGapMin: z.coerce.number().default(120), // 2 minutes in seconds
-  linkedinRequestGapMax: z.coerce.number().default(300), // 5 minutes in seconds
+  linkedinRequestGapMin: z.coerce.number().default(45), // seconds between requests
+  linkedinRequestGapMax: z.coerce.number().default(90), // seconds between requests
   cooldownDays: z.coerce.number().default(7),
 
   // Feature Flags

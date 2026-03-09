@@ -6,7 +6,7 @@ import { launchBrowser, isLoggedIn, newPage, closeBrowser } from '../services/li
 import { canSendRequest, recordRequest, getNextRequestDelay, enterCooldown } from '../services/linkedinRateLimiter.js';
 import type { Page } from 'playwright';
 
-const SAFETY_LIMIT = 5; // Max requests per run
+const SAFETY_LIMIT = 100; // Max requests per run (daily/weekly limits still enforced by rate limiter)
 const CONNECTION_NOTE_MAX = 300;
 const DRY_RUN = false; // When true, stops BEFORE clicking Send so you can verify visually
 

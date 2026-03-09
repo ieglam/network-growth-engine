@@ -191,7 +191,7 @@ export function createConnectionRequestWorker(redisUrl: string) {
       concurrency: 1, // Only one request at a time
       limiter: {
         max: 1,
-        duration: 120000, // At most 1 job per 2 minutes
+        duration: 45000, // At most 1 job per 45 seconds (matches config gap)
       },
     }
   );
